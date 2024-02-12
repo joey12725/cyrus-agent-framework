@@ -1,0 +1,51 @@
+{
+    "scopeName": "source.agent",
+    "name": "Agent",
+    "fileTypes": ["agent"],
+    "patterns": [
+      {
+        "include": "#json"
+      },
+      {
+        "include": "#restricted-fields"
+      }
+    ],
+    "repository": {
+      "json": {
+        "include": "source.json"
+      },
+      "restricted-fields": {
+        "patterns": [
+          {
+            "match": "\"(name)\":",
+            "name": "entity.name.tag.name.agent"
+          },
+          {
+            "match": "\"(role)\":",
+            "name": "entity.name.tag.role.agent"
+          },
+          {
+            "match": "\"(system_prompt)\":",
+            "name": "entity.name.tag.system_prompt.agent"
+          },
+          {
+            "match": "\"(model)\":",
+            "name": "entity.name.tag.model.agent"
+          },
+          {
+            "match": "\"(tools)\":",
+            "name": "entity.name.tag.tools.agent"
+          },
+          {
+            "match": "\"(functions)\":",
+            "name": "entity.name.tag.functions.agent"
+          },
+          {
+            "match": "\"(files)\":",
+            "name": "entity.name.tag.files.agent"
+          }
+        ]
+      }
+    }
+  }
+  

@@ -1,0 +1,55 @@
+{
+    "scopeName": "source.function",
+    "name": "Function",
+    "fileTypes": ["function"],
+    "patterns": [
+      {
+        "include": "#json"
+      },
+      {
+        "include": "#restricted-fields"
+      }
+    ],
+    "repository": {
+      "json": {
+        "include": "source.json"
+      },
+      "restricted-fields": {
+        "patterns": [
+          {
+            "match": "\"(type)\":",
+            "name": "entity.name.tag.type.function"
+          },
+          {
+            "match": "\"(function)\":",
+            "name": "entity.name.tag.function.function"
+          },
+          {
+            "match": "\"(name)\":",
+            "name": "entity.name.tag.name.function"
+          },
+          {
+            "match": "\"(description)\":",
+            "name": "entity.name.tag.description.function"
+          },
+          {
+            "match": "\"(parameters)\":",
+            "name": "entity.name.tag.parameters.function"
+          },
+          {
+            "match": "\"(properties)\":",
+            "name": "entity.name.tag.properties.function"
+          },
+          {
+            "match": "\"(directory)\":",
+            "name": "entity.name.tag.directory.function"
+          },
+          {
+            "match": "\"(required)\":",
+            "name": "entity.name.tag.required.function"
+          }
+        ]
+      }
+    }
+  }
+  

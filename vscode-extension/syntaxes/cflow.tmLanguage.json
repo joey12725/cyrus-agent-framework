@@ -1,0 +1,85 @@
+{
+    "scopeName": "source.cflow",
+    "name": "CFlow",
+    "fileTypes": ["cflow"],
+    "patterns": [
+      {
+        "name": "comment.block.cflow",
+        "begin": "comment.",
+        "end": "$"
+      },
+      {
+        "include": "#keywords"
+      },
+      {
+        "include": "#strings"
+      },
+      {
+        "include": "#function-call"
+      },
+      {
+        "include": "#boolean-operators"
+      },
+      {
+        "include": "#numbers"
+      },
+      {
+        "include": "#initial-command"
+      }
+    ],
+    "repository": {
+      "keywords": {
+        "patterns": [
+          {
+            "match": "\\b(user|self|talks to|until|value|returns|is called|anything|is|of|go to|turn|if|print|env|terminate|self reflects|with context|then|and|or|==|!=|not|\\+|-|\\.|in|call|let|for each|message)\\b",
+            "name": "keyword.control.cflow"
+          }
+        ]
+      },
+      "strings": {
+        "patterns": [
+          {
+            "match": "\"[^\"]*\"",
+            "name": "string.quoted.double.cflow"
+          }
+        ]
+      },
+      "function-call": {
+        "patterns": [
+          {
+            "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\(\\)",
+            "name": "support.function.cflow"
+          }
+        ]
+      },
+      "boolean-operators": {
+        "patterns": [
+          {
+            "match": "\\b(and|or|==|!=|not)\\b",
+            "name": "keyword.operator.boolean.cflow"
+          },
+          {
+            "match": "\\b(\\+|-)\\b",
+            "name": "keyword.operator.arithmetic.cflow"
+          }
+        ]
+      },
+      "numbers": {
+        "patterns": [
+          {
+            "match": "\\b\\d+(\\.\\d+)?\\b",
+            "name": "constant.numeric.cflow"
+          }
+        ]
+      },
+      "initial-command": {
+        "patterns": [
+          {
+            "match": "^[^\\.]+\\.",
+            "name": "entity.name.function.cflow"
+          }
+        ]
+      }
+    }
+  }
+  

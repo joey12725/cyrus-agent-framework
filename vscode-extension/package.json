@@ -1,0 +1,38 @@
+"contributes": {
+    "languages": [{
+        "id": "cflow",
+        "aliases": ["CFlow", "cflow"],
+        "extensions": [".cflow"],
+        "configuration": "./language-configuration/cflow-language-configuration.json"
+      },
+      {
+        "id": "agent",
+        "aliases": ["Agent", "agent"],
+        "extensions": [".agent"],
+        "configuration": "./language-configuration/agent-language-configuration.json"
+      },
+      {
+        "id": "function",
+        "aliases": ["Function", "function"],
+        "extensions": [".function"],
+        "configuration": "./language-configuration/function-language-configuration.json"
+      }
+    ],
+    "grammars": [{
+        "language": "cflow",
+        "scopeName": "source.cflow",
+        "path": "./syntaxes/cflow.tmLanguage.json"
+      },
+      {
+        "language": "agent",
+        "scopeName": "source.agent",
+        "path": "./syntaxes/agent.tmLanguage.json"
+      },
+      {
+        "language": "function",
+        "scopeName": "source.function",
+        "path": "./syntaxes/function.tmLanguage.json"
+      }
+    ]
+  }
+  

@@ -102,12 +102,13 @@ class Agent:
                 raise Exception(f"Missing property: {property}")
             
     def get_response(self, prompt):
+
         self.thread = self.client.beta.threads.messages.create(
             thread_id=self.thread.id,
             role="user",
             content=prompt
         )
-
+        time.sleep(1)
         run = self.client.beta.threads.runs.create(
             thread_id=self.thread.id,
             assistant_id=self.assistant.id,
@@ -167,6 +168,5 @@ class Agent:
         return f"Agent: {self.name}, Role: {self.role}, Model: {self.model}, Tools: {self.tools}, Functions: {self.functions}, Files: {self.files}"
 
 ceo = Agent(r"agent-config-files\CEO.agent")
-print(str(ceo))
 print(ceo.get_response("Hi!"))
 ceo.terminate()

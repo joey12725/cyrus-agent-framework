@@ -1,0 +1,25 @@
+{
+    "type": "function",
+    "function": {
+        "name": "rollDice",
+        "description": "Rolls a specified number of dice, each with a specified number of sides, and optionally adds a specified number to the total sum of all dice rolls.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "diceCount": {
+                    "type": "integer",
+                    "description": "The number of dice to roll."
+                },
+                "sidesPerDie": {
+                    "type": "integer",
+                    "description": "The number of sides on each die."
+                },
+                "additionalSum": {
+                    "type": "integer",
+                    "description": "The number to add to the total sum of dice rolls. This parameter is optional."
+                }
+            },
+            "required": ["diceCount", "sidesPerDie"]
+        }
+    }
+}

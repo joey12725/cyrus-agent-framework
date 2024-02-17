@@ -1,5 +1,17 @@
-"contributes": {
-    "languages": [{
+{
+  "name": "cyrus-framework-language-support",
+  "displayName": "Cyrus framework",
+  "description": "Support for .agent, .cflow and .function files in the Cyrus framework.",
+  "version": "1.0.0",
+  "publisher": "cyrus",
+  "main": "./src/extension.js",
+  "engines": {
+    "vscode": "^1.58.0"
+  },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
         "id": "cflow",
         "aliases": ["CFlow", "cflow"],
         "extensions": [".cflow"],
@@ -18,7 +30,8 @@
         "configuration": "./language-configuration/function-language-configuration.json"
       }
     ],
-    "grammars": [{
+    "grammars": [
+      {
         "language": "cflow",
         "scopeName": "source.cflow",
         "path": "./syntaxes/cflow.tmLanguage.json"
@@ -34,5 +47,10 @@
         "path": "./syntaxes/function.tmLanguage.json"
       }
     ]
-  }
-  
+  },
+  "activationEvents": [
+    "onLanguage:cflow",
+    "onLanguage:agent",
+    "onLanguage:function"
+  ]
+}

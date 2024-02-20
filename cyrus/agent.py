@@ -13,6 +13,7 @@ os.environ["OPENAI_API_KEY"] = "REDACTED_OPENAI_KEY"
 class Agent:
     def __init__(self, agent_config_file):
         self.validate_agent_file(agent_config_file)
+        self.agent_filename=agent_config_file.split("/")[-1]
         with open(agent_config_file, 'r') as agent_config_file:
             agent_config = json.load(agent_config_file)
         self.name = agent_config['name']

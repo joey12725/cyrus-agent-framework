@@ -6,12 +6,14 @@ import sys
 import time
 import importlib.util
 import inspect
-
+from cyrus import Environment
 #set api key eviroment variable (REMOVE BEFORE NEXT COMMIT)
 os.environ["OPENAI_API_KEY"] = "REDACTED_OPENAI_KEY"
 
 class Agent:
     def __init__(self, agent_config_file):
+        global env
+        env = Environment.getInstance()
         self.validate_agent_file(agent_config_file)
         self.agent_filename=agent_config_file.split("/")[-1]
         with open(agent_config_file, 'r') as agent_config_file:
@@ -27,9 +29,7 @@ class Agent:
                 self.tools.append({"type": tool})
 
         self.client = OpenAI()
-
-        #need to fix the indexing here
-        self.functions = {}
+        [env.function_status.set_value(f, False) for f in agent_config['functions']]
         if "functions" in agent_config:
             for function in agent_config['functions']:
                 file_path = os.path.join(os.getcwd(), "functions", function + ".function")
@@ -200,8 +200,10 @@ class Agent:
         for arg in args:
             if arg not in func_args:
                 raise TypeError(f"The function {function} does not accept a parameter named {arg}.")
-
-        return func(**args)
+        env.function_status.set_value(function, "in progress")
+        ret = func(**args)
+        env.function_status.set_value(function, "completed")
+        return ret
 
     def __str__ (self):
         return f"Agent: {self.name}, Role: {self.role}, Model: {self.model}, Tools: {self.tools}, Functions: {self.functions}, Files: {self.files}"

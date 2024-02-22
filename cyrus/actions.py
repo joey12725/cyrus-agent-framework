@@ -63,7 +63,6 @@ class talks_to(Action):
             else:
                 response = agent.get_response("Initiatate a conversation")
                 self.render_markdown(f"**{agent.name}:**\n" + response)
-            env.messages.step += 1
 
         prompt_user = "**User:**"
         self.render_markdown(prompt_user)
@@ -76,6 +75,7 @@ class talks_to(Action):
         env.messages.step += 1
         self.check_transitions()
         self.check_if_statements()
+        env.increment_step()
         if not self.until:
             return self.step_conversation_user(agent)
         else:
@@ -224,9 +224,7 @@ class go_to(Action):
         return
     def __str__(self):
         return f"Go to {self.state}"
-    
-
-            
+              
 class terminate(Action):
     def __init__(self):
         env= Environment.getInstance()

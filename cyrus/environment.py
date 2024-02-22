@@ -66,7 +66,9 @@ class Environment:
         else:
             Environment._instance = self
         self.variables = DynamicAttrDict()
+        self.function_status = DynamicAttrDict()
         self.messages = DynamicAttrDict()
+        self.functions = []
         self.messages.step = 0
         if os.path.exists(os.path.join(os.getcwd(), "config.ini")):
             self.configfile = configparser.ConfigParser()
@@ -81,4 +83,10 @@ class Environment:
 
     def __str__(self):
         print(self.name, self.value)
+
+    def increment_step(self):
+        self.messages.step += 1
+        for function in self.function_status:
+            if self.function_status[function] != "in progress":
+                self.function_status[function] = False
     

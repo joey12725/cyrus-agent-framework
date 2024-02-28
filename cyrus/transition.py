@@ -5,7 +5,7 @@ class Transition():
         self.source = source
         self.destination = destination
         self.condition = condition
-        global Env
+        global env
         env = Environment.getInstance()
 
     def __str__(self):
@@ -17,4 +17,4 @@ class Transition():
         else:
             return bool(self.condition)
     def run(self):
-        env.
+        env.flow.current_state = self.destination

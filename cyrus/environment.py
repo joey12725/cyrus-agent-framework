@@ -67,6 +67,7 @@ class Environment:
             Environment._instance = self
         self.variables = DynamicAttrDict()
         self.function_status = DynamicAttrDict()
+        self.flow = DynamicAttrDict()
         self.messages = DynamicAttrDict()
         self.functions = []
         self.messages.step = 0

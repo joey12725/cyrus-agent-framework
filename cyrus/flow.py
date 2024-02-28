@@ -3,6 +3,11 @@ import os
 import configparser
 class cFlow():
 
+    def getInstance():
+        if cFlow.instance == None:
+            cFlow.instance = cFlow()
+        return cFlow.instance
+
     def __init__(self, states, start_state):
         self.states = states
         self.start_state = start_state

@@ -26,3 +26,17 @@ print(agent.get_response("What changes did you make?"))
 #go_to("1").run()
 #print(env.current_state)
 
+env.variables.x.y.z.a = 5
+env.variables.x.y.z.b = 5
+env.variables.x.y.z.c = 5
+env.variables.x.y.z.d = 5
+env.variables.x.y.z.e = 5
+
+
+env.variables.show()
+
+env.clear()
+
+print("cleared enviroment")
+
+env.variables.show()

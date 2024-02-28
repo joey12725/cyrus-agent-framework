@@ -1,37 +1,42 @@
 import os
 import configparser
 from cyrus import Agent, Environment
+
 class Function():
     pass
 #GENERATE AND PREDICT WILL BE INTRODUCED LATER WITH THE INTEGRATION OF ADDITIONAL MODELS, MULTIMODALITY, AND OTHER FEATURES
-class generate():
+class generate(Function):
     def __init__(self, model, prompt):
         self.model = model
         self.prompt = prompt
     def run(self):
         pass
-class predict():
+class predict(Function):
             def __init__(self, model, data):
                 self.model = model
                 self.data = data
-class is_called():
+class is_called(Function):
     def __init__(self, function):
         self.function = function
         self.env = Environment.getInstance()
     def run(self):
-        return bool(self.env.function_status.new_index(self.function))
+        return bool(self.env.function_status.get_index(self.function))
 class returns(Function):
     def __init__(self, function, value):
         self.function = function
         self.value = value
         self.env = Environment.getInstance()
     def run(self):
-        return self.env.value == self.value and self.env.function_status.new_index(self.function) == "completed"
+        if self.value == "*":
+            return self.env.function_status.get_index(self.function) == "completed"
+        return self.env.value == self.value and self.env.function_status.get_index(self.function) == "completed"
 class turn(Function):
     def __init__(self, turn):
         self.turn = turn
+        self.env = Environment.getInstance()
     def run(self):
         return self.turn == self.env.messages.step
+    
 class and_(Function):
     def __init__(self, condition1, condition2):
         self.condition1 = condition1

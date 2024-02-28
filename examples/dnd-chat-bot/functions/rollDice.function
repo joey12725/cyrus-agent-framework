@@ -1,6 +1,4 @@
 {
-    "type": "function",
-    "function": {
         "name": "rollDice",
         "description": "Rolls a specified number of dice, each with a specified number of sides, and optionally adds a specified number to the total sum of all dice rolls.",
         "parameters": {
@@ -22,4 +20,3 @@
             "required": ["diceCount", "sidesPerDie"]
         }
     }
-}

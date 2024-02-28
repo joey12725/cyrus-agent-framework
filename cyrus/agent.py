@@ -18,6 +18,7 @@ class Agent:
         self.agent_filename=agent_config_file.split("/")[-1]
         with open(agent_config_file, 'r') as agent_config_file:
             agent_config = json.load(agent_config_file)
+        agent_config = {"type": "function", "function": agent_config}
         self.name = agent_config['name']
         self.role = agent_config['role']
         self.system_prompt = agent_config['system_prompt']
@@ -101,8 +102,9 @@ class Agent:
         with open(function_file, 'r') as function_file:
             try:
                 function_config = json.load(function_file)
+                function_config = {"type": "function", "function": function_config}
             except json.JSONDecodeError:
-                raise Exception(f"Invalid JSON file: {function_file}")
+                raise Exception(f"Invalid formatting (JSON DECODE ERROR): {function_file}")
 
         #check if the file has the required properties
         required_properties = ["type", "function"]

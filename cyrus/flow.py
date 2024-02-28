@@ -3,7 +3,7 @@ import os
 import configparser
 class cFlow():
 
-    def __init__(self, states, start_state):
+    def __init__(self, states, transitions, start_state):
         self.states = states
         self.start_state = start_state
         self.current_state = start_state
@@ -12,6 +12,7 @@ class cFlow():
         config.read(os.path.join(os.getcwd(), "config.ini"))
 
     def run(self):
+        #if the start state is in the list of states, remove it
         pass
 
     def run_transition(self, transition):
@@ -21,6 +22,9 @@ class cFlow():
         pass
 
     def validate_config_file(self, config_file):
+        pass
+
+    def check_step(self):
         pass
 
     def show():

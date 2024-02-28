@@ -41,17 +41,17 @@ if t1:
 else:
     print("setting variables with set_value failed")
 
-#test setting variables with new_index
+#test setting variables with get_index
 
 foo = "bar"
-env.variables.new_index(foo).new_value = "bar"
+env.variables.get_index(foo).new_value = "bar"
 
 t1 = (env.variables.bar.new_value == "bar")
 
 if t1:
-    print("setting variables with new_index passed")
+    print("setting variables with get_index passed")
 else:
-    print("setting variables with new_index failed")
+    print("setting variables with get_index failed")
 #test show method
 
 print("show method:")

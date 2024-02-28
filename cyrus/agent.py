@@ -30,11 +30,14 @@ class Agent:
                 self.tools.append({"type": tool})
 
         self.client = OpenAI()
-        [env.function_status.set_value(f, False) for f in agent_config['functions']]
+
+        self.functions = {}
+
+        for f in agent_config['functions']:
+            env.function_status.set_value(f, False) 
         if "functions" in agent_config:
             for function in agent_config['functions']:
                 file_path = os.path.join(os.getcwd(), "functions", function + ".function")
-
                 with open(file_path, 'r') as file:
                     self.validate_function_file(file_path)
                     function_data = json.load(file)
@@ -161,6 +164,7 @@ class Agent:
         messages = self.client.beta.threads.messages.list(
             thread_id=self.thread.id
         )
+        env.increment_step()
         for thread_message in messages.data:
             if thread_message.role == 'assistant':
                 for content in thread_message.content:

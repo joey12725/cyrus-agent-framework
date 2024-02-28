@@ -1,7 +1,7 @@
 import os
 import sys
 import configparser
-from cyrus import Agent, State, Environment
+from cyrus import Agent, State, Environment, cFlow
 from colorama import Fore, Style
 from rich.console import Console
 from rich.markdown import Markdown
@@ -11,7 +11,9 @@ import json
 class Action(State):
     def __init__(self):
         global env 
-        env= Environment.getInstance()
+        env = Environment.getInstance()
+        global flow
+        flow = cFlow.getInstance()
         self.console = Console()
 
 class talks_to(Action):
@@ -42,8 +44,6 @@ class talks_to(Action):
                 self.agent1 = agent1
                 self.agent2 = agent2
         
-        
-
     def run(self):
         if self.conversation_type == "user":
             self.step_conversation_user(self.agent)
@@ -156,13 +156,13 @@ class let(Action):
         self.value = value
 
     def run(self):
-        # This basically converts x.y.z.a=5 to env.variables.new_index("x").new_index("y").new_index("z").set_value("a", 5)
+        # This basically converts x.y.z.a=5 to env.variables.get_index("x").get_index("y").get_index("z").set_value("a", 5)
         # more secure and flexible than using the value of the variable directly (specifically if you have a field key stored in a variable)
         def recursive_set(dynamic_attr_dict, keys, value):
             if len(keys) == 1:
                 dynamic_attr_dict.set_value(keys[0], value)
             else:
-                new_dynamic_attr_dict = dynamic_attr_dict.new_index(keys[0])
+                new_dynamic_attr_dict = dynamic_attr_dict.get_index(keys[0])
                 recursive_set(new_dynamic_attr_dict, keys[1:], value)
         keys = self.variable.split(".")
         recursive_set(env.variables, keys, self.value)

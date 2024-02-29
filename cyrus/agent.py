@@ -14,6 +14,7 @@ class Agent:
     def __init__(self, agent_config_file):
         global env
         env = Environment.getInstance()
+        agent_config_file = os.path.join(os.getcwd(), "agents", agent_config_file  + ".agent")
         self.validate_agent_file(agent_config_file)
         self.agent_filename=agent_config_file.split("/")[-1]
         with open(agent_config_file, 'r') as agent_config_file:

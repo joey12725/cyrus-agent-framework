@@ -11,6 +11,8 @@ setup(
     url='https://github.com/joey12725/cyrus-agent-framework',
     install_requires=[
         'openai'
+        'networkx',
+        'matplotlib',
     ],
 )
 

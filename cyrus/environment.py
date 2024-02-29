@@ -69,6 +69,7 @@ class Environment:
         self.function_status = DynamicAttrDict()
         self.flow = DynamicAttrDict()
         self.messages = DynamicAttrDict()
+        self.messages.conversations = []
         self.functions = []
         self.messages.step = 0
         if os.path.exists(os.path.join(os.getcwd(), "config.ini")):
@@ -122,10 +123,20 @@ class Environment:
     def __str__(self):
         print(self.name, self.value)
 
-    def increment_step(self):
+    def increment_step(self, message=None, sender=None, member1=None, member2=None, new_conversation=False):
         self.messages.step += 1
         self.value = False
         for function in self.function_status:
             if self.function_status.get_index(function) != "in progress":
                 self.function_status.set_value(function, False)
-    
+        if new_conversation:
+            self.messages.conversations.append({"member1": member1, "member2": member2, messages: [{"sender": sender, "message": message}]})
+        else:
+            #find the conversation with the matching members and append the message and sender. Always prefer the newest conversation
+            for conversation in self.messages.conversations.reverse():
+                if conversation["member1"] == member1 and conversation["member2"] == member2:
+                    conversation.messages.append({"sender": sender, "message": message})
+                    return
+                elif conversation["member1"] == member2 and conversation["member2"] == member1:
+                    conversation.messages.append({"sender": sender, "message": message})
+                    return

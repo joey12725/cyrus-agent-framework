@@ -2,13 +2,14 @@ import os
 import configparser
 from cyrus import * #, Enviroment
 import threading
-class State():
 
+
+class State():
     def __init__(self, name, transitions, actions):
         self.name = name
         self.transitions = transitions
         self.actions = actions
-
+        
     def run(self):
         def run_actions():
             for action in self.actions:
@@ -37,12 +38,4 @@ class State():
         actions_thread.join()
 
         self.stop_transitions = True
-
-
-    
-    def get_agents(self):
-        #get all the agents in actions in the state and sets self.agent[role] = Agent(os.path.join(os.getcwd(), "agents", agent + ".agent"))
-        self.agents = {}
-    
-    def check_if_statements(self):
-        pass
+ 

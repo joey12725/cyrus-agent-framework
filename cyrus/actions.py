@@ -8,19 +8,21 @@ from rich.markdown import Markdown
 import importlib.util
 import json
 
-class Action(State):
+class Action():
     def __init__(self):
         global env 
         env = Environment.getInstance()
         global flow
         flow = cFlow.getInstance()
         self.console = Console()
+        self.agents = []
 
 class talks_to(Action):
-    def __init__(self, agent1, agent2, context="", load_memory=False, until = False):
+    def __init__(self, agent1, agent2, context="", load_memory=False, until = False, new_conversation=True):
         super().__init__()
         self.context = context
         self.until = until
+        self.new_conversation = new_conversation
         if agent1 == "user" and agent2 == "user":
             raise Exception("Both agents cannot be user")
         
@@ -70,12 +72,17 @@ class talks_to(Action):
             user_input = "CONTEXT: " + str(context) + "\n USER: " + input()
         else:
             user_input = input()
+        if user_speaks_first:
+            member1 = "user"
+            member2 = agent.name
+        else:
+            member1 = agent.name
+            member2 = "user"
+        env.increment_step(member1=member1, member2=member2, message=user_input, sender="user", new_conversation=self.new_conversation)
+        self.new_conversation = False
         response = agent.get_response(user_input)
         self.render_markdown(f"**{agent.name}:**\n" + response)
-        env.messages.step += 1
-        self.check_transitions()
-        self.check_if_statements()
-        env.increment_step()
+        env.increment_step(member1=member1, member2=member2, message=response, sender=agent.name)
         if not self.until:
             return self.step_conversation_user(agent)
         else:
@@ -86,12 +93,10 @@ class talks_to(Action):
             response = agent1.get_response("Initiatate a conversation with context:" + str(context))
         else:
             response = agent1.get_response("Initiatate a conversation")
-        
+        env.increment_step(member1=agent1.name, member2=agent2.name, message=response, sender=agent1.name, new_conversation=self.new_conversation)
+        self.new_conversation = False
         response = agent2.get_response(response)
-        env.messages.step += 1
-        self.check_transitions()
-        self.check_if_statements()
-
+        env.increment_step(member1=agent1.name, member2=agent2.name, message=response, sender=agent2.name)
         if env.config.verbose:
             self.render_markdown(f"**{agent1.name}:**\n" + response)
 

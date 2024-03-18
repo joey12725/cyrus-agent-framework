@@ -6,7 +6,7 @@ import sys
 import time
 import importlib.util
 import inspect
-from cyrus import Environment
+from cyrus import Environment, vprint
 #set api key eviroment variable (REMOVE BEFORE NEXT COMMIT)
 os.environ["OPENAI_API_KEY"] = "REDACTED_OPENAI_KEY"
 
@@ -19,7 +19,6 @@ class Agent:
         self.agent_filename=agent_config_file.split("/")[-1]
         with open(agent_config_file, 'r') as agent_config_file:
             agent_config = json.load(agent_config_file)
-        agent_config = {"type": "function", "function": agent_config}
         self.name = agent_config['name']
         self.role = agent_config['role']
         self.system_prompt = agent_config['system_prompt']
@@ -42,6 +41,7 @@ class Agent:
                 with open(file_path, 'r') as file:
                     self.validate_function_file(file_path)
                     function_data = json.load(file)
+                    function_data = {"type": "function", "function": function_data}
                     parameters_keys = list(function_data['function']['parameters']['properties'].keys())
                     self.functions[function] = function_data
                     self.functions["args"] = {}
@@ -77,6 +77,7 @@ class Agent:
             raise Exception(f"Invalid file extension: {agent_config_file.split('.')[1]}")
             return False
         #check if the file is a json
+
         with open(agent_config_file, 'r') as agent_config_file:
             try:
                 agent_config = json.load(agent_config_file)
@@ -209,6 +210,7 @@ class Agent:
                 raise TypeError(f"The function {function} does not accept a parameter named {arg}.")
         env.function_status.set_value(function, "in progress")
         ret = func(**args)
+        vprint(f"FUNCTION {function} WAS CALLED AND RETURNED {ret}")
         env.function_status.set_value(function, "completed")
         return ret
 

@@ -1,7 +1,7 @@
 import os
 import sys
 import configparser
-from cyrus import Agent, State, Environment, cFlow
+from cyrus import Agent, State, Environment, cFlow, render_markdown, vprint
 from colorama import Fore, Style
 from rich.console import Console
 from rich.markdown import Markdown
@@ -38,11 +38,11 @@ class talks_to(Action):
             if self.conversation_type == "user":
                 non_user_agent = agent1 if agent1 != "user" else agent2
                 user_speaks_first = True if agent1 == "user" else False
-                agent = Agent(os.path.join(os.getcwd(), "agents", non_user_agent.agent_filename))
+                agent = Agent(os.path.join(os.getcwd(), "agents", non_user_agent.agent_filename.replace(".agent", "")))
                 self.agent = agent
             else:
-                agent1 = Agent(os.path.join(os.getcwd(), "agents", agent1.agent_filename))
-                agent2 = Agent(os.path.join(os.getcwd(), "agents", agent2.agent_filename))
+                agent1 = Agent(os.path.join(os.getcwd(), "agents", agent1.agent_filename.replace(".agent", "")))
+                agent2 = Agent(os.path.join(os.getcwd(), "agents", agent2.agent_filename.replace(".agent", "")))
                 self.agent1 = agent1
                 self.agent2 = agent2
         
@@ -51,23 +51,20 @@ class talks_to(Action):
             self.step_conversation_user(self.agent)
         else:
             self.step_conversation_agent(self.agent1, self.agent2, context=self.context)
-
-    def render_markdown(self, text):
-        """Render Markdown text to the terminal."""
-        markdown = Markdown(text)
-        self.console.print(markdown)
     
     def step_conversation_user(self, agent, context="", user_speaks_first=True):
+        if env.flow.kill_state:
+            return
         if not user_speaks_first:
             if context != "":
                 response = agent.get_response("Initiatate a conversation with context:" + str(context))
-                self.render_markdown(f"**{agent.name}:**\n" + response)
+                render_markdown(f"**{agent.name}:**\n" + response)
             else:
                 response = agent.get_response("Initiatate a conversation")
-                self.render_markdown(f"**{agent.name}:**\n" + response)
+                render_markdown(f"**{agent.name}:**\n" + response)
 
         prompt_user = "**User:**"
-        self.render_markdown(prompt_user)
+        render_markdown(prompt_user)
         if env.messages.step == 0 and context != "" and user_speaks_first:
             user_input = "CONTEXT: " + str(context) + "\n USER: " + input()
         else:
@@ -81,7 +78,7 @@ class talks_to(Action):
         env.increment_step(member1=member1, member2=member2, message=user_input, sender="user", new_conversation=self.new_conversation)
         self.new_conversation = False
         response = agent.get_response(user_input)
-        self.render_markdown(f"**{agent.name}:**\n" + response)
+        render_markdown(f"**{agent.name}:**\n" + response)
         env.increment_step(member1=member1, member2=member2, message=response, sender=agent.name)
         if not self.until:
             return self.step_conversation_user(agent)
@@ -89,6 +86,8 @@ class talks_to(Action):
             return
     
     def step_conversation_agent(self, agent1, agent2, context=""):
+        if env.flow.kill_state:
+            return
         if context != "":
             response = agent1.get_response("Initiatate a conversation with context:" + str(context))
         else:
@@ -97,8 +96,7 @@ class talks_to(Action):
         self.new_conversation = False
         response = agent2.get_response(response)
         env.increment_step(member1=agent1.name, member2=agent2.name, message=response, sender=agent2.name)
-        if env.config.verbose:
-            self.render_markdown(f"**{agent1.name}:**\n" + response)
+        vprint(f"**{agent1.name}:**\n" + response)
 
         if not self.until:
             return self.step_conversation_agent(agent1, agent2)
@@ -192,29 +190,14 @@ class loop(Action):
         self.actions = actions
     def run(self):
         for item in self.list:
+            if env.flow.kill_state:
+                return
             self.iterator = item
             for action in self.actions:
                 action.run()
     def __str__(self):
         return f"Loop through {self.list} with {self.iterator} and do {[str(action) for action in self.actions]}"
 
-"""
-class if_statement(Action):
-    def __init__(self, condition, actions):
-        self.condition = condition
-        self.actions = actions
-    
-    def run(self):
-        if self.condition:
-            for action in self.actions:
-                action.run()
-        else:
-            pass
-    
-
-    def __str__(self):
-        return f"If {str(self.condition)} then {[str(action) for action in self.actions]}"
-"""
 class go_to(Action):
     def __init__(self, state, context=""):
         super().__init__()

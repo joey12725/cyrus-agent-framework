@@ -130,13 +130,13 @@ class Environment:
             if self.function_status.get_index(function) != "in progress":
                 self.function_status.set_value(function, False)
         if new_conversation:
-            self.messages.conversations.append({"member1": member1, "member2": member2, messages: [{"sender": sender, "message": message}]})
+            self.messages.conversations.append({"member1": member1, "member2": member2, "messages": [{"sender": sender, "message": message}]})
         else:
             #find the conversation with the matching members and append the message and sender. Always prefer the newest conversation
-            for conversation in self.messages.conversations.reverse():
+            for conversation in reversed(self.messages.conversations):
                 if conversation["member1"] == member1 and conversation["member2"] == member2:
-                    conversation.messages.append({"sender": sender, "message": message})
+                    conversation["messages"].append({"sender": sender, "message": message})
                     return
                 elif conversation["member1"] == member2 and conversation["member2"] == member1:
-                    conversation.messages.append({"sender": sender, "message": message})
+                    conversation["messages"].append({"sender": sender, "message": message})
                     return

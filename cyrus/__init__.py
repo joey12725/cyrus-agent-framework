@@ -1,5 +1,7 @@
 #from .agent import Agent
 from cyrus.environment import Environment
+from cyrus.tools import vprint
+from cyrus.tools import render_markdown
 from cyrus.agent import Agent
 from cyrus.flow import cFlow
 from cyrus.states import State
@@ -14,4 +16,5 @@ from cyrus.actions import loop
 from cyrus.actions import go_to
 from cyrus.actions import terminate
 from cyrus.functions import *
+
 #from cyrus.functions import Function

@@ -1,4 +1,4 @@
-from cyrus import Environment
+from cyrus import Environment, vprint
 
 class Transition():
     def __init__(self, source, destination, condition):
@@ -12,6 +12,7 @@ class Transition():
         return f"Transition from {self.source} to {self.destination} with condition {self.condition}"
     def check(self):
         #if it is callable
+        vprint(f"Checking transition from {self.source.name} to {self.destination.name}")
         if callable(self.condition):
             return self.condition()
         else:

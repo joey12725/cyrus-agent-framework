@@ -1,6 +1,6 @@
 import os
 import configparser
-from cyrus import Agent, Environment
+from cyrus import Agent, Environment, vprint
 
 class Function():
     pass
@@ -35,6 +35,7 @@ class turn(Function):
         self.turn = turn
         self.env = Environment.getInstance()
     def run(self):
+        vprint(f"turn: {self.env.messages.step}")
         return self.turn == self.env.messages.step
     
 class and_(Function):

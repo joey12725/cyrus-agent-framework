@@ -105,7 +105,7 @@ class talks_to(Action):
         
     def __str__(self):
         if self.conversation_type == "user":
-            return f"{self.agent} talks to the user"
+            return f"{self.agent.name} talks to the user"
         if self.conversation_type == "agent":
             return f"{self.agent1.name} talks to {self.agent2.name}"
         if self.conversation_type == "self":

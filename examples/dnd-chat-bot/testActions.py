@@ -2,12 +2,12 @@ from cyrus import *
 import random
 
 env = Environment.getInstance()
-agent = Agent("agents/dm.agent")
+agent = Agent("dm")
 
 #action = talks_to("user", agent, context="Three goblins, armed with scimitars and shortbows, lurk in the camp; they have 7 HP each, AC 15, and can deal 1d6+2 slashing or piercing damage per attack.")    
-
 #action = talks_to(agent, "self", context="Whoever talks first is the dungeon master. Set the scene for the player to inhabit. The (whoever speaks second) will then explain their charecter and begin playing. Remember, you are not both the DM and the player, you will assume the role of either the DM or the player. Remember to use your dice and include combat.")
-
+action = println("Hello World")
+action.run()
 """
 agent.get_response("write a christmas strory about 3 goblins gifting the spoils of their raids")
 action = reflect(agent)
@@ -26,6 +26,7 @@ print(agent.get_response("What changes did you make?"))
 #go_to("1").run()
 #print(env.current_state)
 
+"""
 env.variables.x.y.z.a = 5
 env.variables.x.y.z.b = 5
 env.variables.x.y.z.c = 5
@@ -40,3 +41,4 @@ env.clear()
 print("cleared enviroment")
 
 env.variables.show()
+"""

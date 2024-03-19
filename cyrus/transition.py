@@ -11,10 +11,10 @@ class Transition():
     def __str__(self):
         return f"Transition from {self.source} to {self.destination} with condition {self.condition}"
     def check(self):
-        #if it is callable
-        vprint(f"Checking transition from {self.source.name} to {self.destination.name}")
         if callable(self.condition):
             return self.condition()
+        elif hasattr(self.condition, "run"):
+            return self.condition.run()
         else:
             return bool(self.condition)
     def run(self):

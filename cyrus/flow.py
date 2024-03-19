@@ -1,10 +1,12 @@
 from cyrus import Agent, Environment, vprint
 import os 
 import configparser
+import concurrent.futures
 import threading
 import time
 import matplotlib.pyplot as plt
 import networkx as nx
+from time import sleep
 
 class cFlow():
 
@@ -37,41 +39,43 @@ class cFlow():
         config.read(os.path.join(os.getcwd(), "config.ini"))
         vprint("initialized flow")
 
-    def watch_state(self):
-        current_state = env.flow.current_state
-        while True:
-            if env.flow.current_state != current_state:
-                env.flow.kill_state = True
-                vprint(f"state changed to {env.flow.current_state.name}, killing current state")
-                return
+    def run_state_actions(self, state):
+        vprint(f"Running state actions: {state.name}")
+        state.run()
+
+    def check_transitions(self, state):
+        vprint(f"Checking transitions for state: {state.name}")
+        while not env.flow.kill_state:
+            for transition in state.transitions:
+                if transition.check():
+                    vprint(f"Transitioning from {transition.source.name} to {transition.destination.name} since condition is met")
+                    env.flow.kill_state = True
+                    env.flow.current_state = transition.destination
+                    return
             time.sleep(0.1)
 
-    def run_state(self):
-        env.flow.kill_state = False
-        current_state = env.flow.current_state
-        current_state.run()
-        vprint("state finished running with no transitions met, killing current state")
-        env.flow.kill_state = True
-        return
-
-
     def run(self):
-        #with the current state, run the state and watch for a change in state
-        #if the state changes, kill the current state and run the new current state
-        #if the state does not change, kill the current state and return
         env.flow.kill_state = False
         current_state = env.flow.current_state
-        state_thread = threading.Thread(target=self.run_state)
-        watch_thread = threading.Thread(target=self.watch_state)
-        state_thread.start()
-        watch_thread.start()
-        state_thread.join()
-        watch_thread.join()
-        if env.flow.kill_state:
-            env.flow.current_state = env.flow.current_state.next_state
-            env.flow.halt_state = False
-            self.run()
-        
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            while True:
+                vprint(f"Starting state: {current_state.name}")
+                actions_future = executor.submit(self.run_state_actions, current_state)
+                transitions_future = executor.submit(self.check_transitions, current_state)
+
+                while not env.flow.kill_state and not actions_future.done():
+                    time.sleep(0.1)
+                vprint(f"env.flow.kill_state: {env.flow.kill_state}, actions_future.done(): {actions_future.done()}")
+                if env.flow.kill_state:
+                    vprint(f"State changed, terminating state: {current_state.name}")
+                    sleep(9)
+                    env.flow.kill_state = False
+                    current_state = env.flow.current_state
+                else:
+                    vprint(f"State actions completed: {current_state.name}")
+                    transitions_future.result()  # Wait for transitions to complete
+                    current_state = env.flow.current_state
     
     def terminate(self):
         pass

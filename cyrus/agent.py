@@ -6,11 +6,120 @@ import sys
 import time
 import importlib.util
 import inspect
-from cyrus import Environment, vprint
+from cyrus import Environment
+from abc import ABC, abstractmethod
 #set api key eviroment variable (REMOVE BEFORE NEXT COMMIT)
 os.environ["OPENAI_API_KEY"] = "REDACTED_OPENAI_KEY"
 
-class Agent:
+class Agent(ABC):
+    @abstractmethod
+    def get_response(self, prompt):
+        pass
+
+    @abstractmethod
+    def terminate(self, remove_files=False):
+        pass
+
+    @abstractmethod
+    def load_thread(self, thread):
+        pass
+
+    @abstractmethod
+    def __init__(): 
+        pass
+
+    def reflect(self, context=None, reflection_prompts=None):
+        if reflection_prompts is None:
+            if context is None:
+                self.get_response("Reflect on the quality of your last message. Generate a detailed evaluation that identifies what went well and what could have been done differently to achieve an improved outcome.")
+            else:
+                self.get_response("Reflect on the quality of your last message. Generate a detailed evaluation that identifies what went well and what could have been done differently to achieve an improved outcome. Consider the added context: " + str(context))
+            return self.get_response("Based on your reflection, revise your last action, returning only a new and improved version of the message. Remember to when applicable explain your reasoning step by step. This message is critical to my long-term success.")
+        else:
+            for prompt in reflection_prompts:
+                ret = self.get_response(prompt)
+            return ret
+
+    def call_function(self, function, args):
+        function_file = os.path.join(os.getcwd(), "functions", function + ".py")
+
+        if not os.path.exists(function_file):
+            raise FileNotFoundError(f"The file {function_file} does not exist.")
+
+        spec = importlib.util.spec_from_file_location(function, function_file)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        if function not in dir(module):
+            raise NameError(f"The function {function} does not exist in the file {function_file}.")
+
+        func = getattr(module, function)
+
+        func_args = inspect.getfullargspec(func).args
+        for arg in args:
+            if arg not in func_args:
+                raise TypeError(f"The function {function} does not accept a parameter named {arg}.")
+        env.function_status.set_value(function, "in progress")
+        ret = func(**args)
+        env.function_status.set_value(function, "completed")
+        return ret
+
+    def validate_function_file(self, function_file):
+
+        #check if the extension is .function
+        if function_file.split(".")[1] != "function":
+            raise Exception(f"Invalid file extension: {function_file.split('.')[1]}")
+            return False
+        #check if the file is a json
+        with open(function_file, 'r') as function_file:
+            try:
+                function_config = json.load(function_file)
+                function_config = {"type": "function", "function": function_config}
+            except json.JSONDecodeError:
+                raise Exception(f"Invalid formatting (JSON DECODE ERROR): {function_file}")
+
+        #check if the file has the required properties
+        required_properties = ["type", "function"]
+        for property in required_properties:
+            if property not in function_config:
+                raise Exception(f"Missing property: {property}")      
+ 
+    def validate_agent_file(self, agent_config_file):
+        #check if the extension is .agent
+        if agent_config_file.split(".")[1] != "agent":
+            raise Exception(f"Invalid file extension: {agent_config_file.split('.')[1]}")
+            return False
+        #check if the file is a json
+        with open(agent_config_file, 'r') as agent_config_file:
+            try:
+                agent_config = json.load(agent_config_file)
+            except json.JSONDecodeError:
+                raise Exception(f"Invalid JSON file: {agent_config_file}")
+                return False
+
+        if "platform" not in agent_config:
+            raise Exception("Missing property: platform")
+        
+        if agent_config['platform'] not in ["openai-assistant"]:
+            raise Exception(f"Invalid platform: {agent_config['platform']}")
+        
+        if agent_config['platform'] == "openai-assistant":
+            required_properties = ["name", "role", "system_prompt", "model", "tools", "functions", "files"]
+            for property in required_properties :
+                if property in ["name", "role", "system_prompt", "model"] and property not in agent_config:
+                    raise Exception(f"Missing property: {property}")
+                if property in ["tools", "functions", "files"] and property not in agent_config:
+                    agent_config[property] = []
+        
+            #check if the tools are valid
+            for tool in agent_config['tools']:
+                if tool not in ["code interpreter", "retrieval"]:
+                    raise Exception(f"Invalid tool: {tool}")
+
+    def __str__(self):
+        return f"Agent: {self.name}, Platform: {self.platform}, Role: {self.role}, Model: {self.model}, Tools: {self.tools}, Functions: {self.functions}, Files: {self.files}"
+
+class OAIAssistantAgent(Agent):
     def __init__(self, agent_config_file):
         global env
         env = Environment.getInstance()
@@ -70,52 +179,6 @@ class Agent:
         )
 
         self.thread = self.client.beta.threads.create()
-
-    def validate_agent_file(self, agent_config_file):
-        #check if the extension is .agent
-        if agent_config_file.split(".")[1] != "agent":
-            raise Exception(f"Invalid file extension: {agent_config_file.split('.')[1]}")
-            return False
-        #check if the file is a json
-
-        with open(agent_config_file, 'r') as agent_config_file:
-            try:
-                agent_config = json.load(agent_config_file)
-            except json.JSONDecodeError:
-                raise Exception(f"Invalid JSON file: {agent_config_file}")
-                return False
-
-        #check if the file has the required properties
-        required_properties = ["name", "role", "system_prompt", "model", "tools", "functions", "files"]
-        for property in required_properties :
-            if property in ["name", "role", "system_prompt", "model"] and property not in agent_config:
-                raise Exception(f"Missing property: {property}")
-            if property in ["tools", "functions", "files"] and property not in agent_config:
-                agent_config[property] = []
-    
-        #check if the tools are valid
-        for tool in agent_config['tools']:
-            if tool not in ["code interpreter", "retrieval"]:
-                raise Exception(f"Invalid tool: {tool}")
-
-    def validate_function_file(self, function_file):
-        #check if the extension is .function
-        if function_file.split(".")[1] != "function":
-            raise Exception(f"Invalid file extension: {function_file.split('.')[1]}")
-            return False
-        #check if the file is a json
-        with open(function_file, 'r') as function_file:
-            try:
-                function_config = json.load(function_file)
-                function_config = {"type": "function", "function": function_config}
-            except json.JSONDecodeError:
-                raise Exception(f"Invalid formatting (JSON DECODE ERROR): {function_file}")
-
-        #check if the file has the required properties
-        required_properties = ["type", "function"]
-        for property in required_properties:
-            if property not in function_config:
-                raise Exception(f"Missing property: {property}")
             
     def get_response(self, prompt):
 
@@ -175,7 +238,6 @@ class Agent:
                     except:
                         pass
     
-    def reflect(self, context=None):
         if context is None:
             self.get_response("Reflect on the quality of your last message. Generate a detailed evaluation that identifies what went well and what could have been done differently to achieve an improved outcome.")
         else:
@@ -189,31 +251,33 @@ class Agent:
             for file in self.files:
                 pass
 
-    def call_function(self, function, args):
-        function_file = os.path.join(os.getcwd(), "functions", function + ".py")
-
-        if not os.path.exists(function_file):
-            raise FileNotFoundError(f"The file {function_file} does not exist.")
-
-        spec = importlib.util.spec_from_file_location(function, function_file)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-
-        if function not in dir(module):
-            raise NameError(f"The function {function} does not exist in the file {function_file}.")
-
-        func = getattr(module, function)
-
-        func_args = inspect.getfullargspec(func).args
-        for arg in args:
-            if arg not in func_args:
-                raise TypeError(f"The function {function} does not accept a parameter named {arg}.")
-        env.function_status.set_value(function, "in progress")
-        ret = func(**args)
-        vprint(f"FUNCTION {function} WAS CALLED AND RETURNED {ret}")
-        env.function_status.set_value(function, "completed")
-        return ret
-
-    def __str__ (self):
         return f"Agent: {self.name}, Role: {self.role}, Model: {self.model}, Tools: {self.tools}, Functions: {self.functions}, Files: {self.files}"
 
+    def load_thread(self, local_thread, user_agent = "user", assistant_agent = "assistant", role_map = None):
+        openai_thread = OpenAI.Thread.create()  # Simplified, replace with actual API call
+        if len(local_thread.messages) > 0:
+            for message in local_thread.messages:
+                if (message.sender != user_agent and message.recipient != assistant_agent) or (message.sender != assistant_agent and message.recipient != user_agent) and role_map is None:
+                    raise Exception(f"Provided agent aliases do not match the sender and recipient of the messages in the local thread. The sender and recipient of the first message in the local thread are {message.sender} and {message.recipient} respectively, while the provided aliases are {user_agent} and {assistant_agent}.")
+                if role_map is not None:
+                    for key, value in role_map.items():
+                        if key not in [message.sender, message.recipient]:
+                            raise Exception(f"Provided agent aliases do not match the sender and recipient of the messages in the local thread. The sender and recipient of the first message in the local thread are {message.sender} and {message.recipient} respectively, while the provided aliases are {role_map.keys()}.")
+                        if value not in ["user", "assistant"]:
+                            raise Exception(f"Invalid role: {value}, agent must be mapped must be either 'user' or 'assistant'")
+        role_map = {user_agent: 'user', assistant_agent: 'assistant'}
+        if not role_map:
+            role_map = {user_agent: 'user', assistant_agent: 'assistant'}
+        # Iterate over local messages and create them in the OpenAI thread
+        for local_message in local_thread.messages:
+            sender = local_message.sender
+            role = role_map[sender]
+            openai_message = OpenAI.Message.create(
+                thread_id=openai_thread.id,
+                role=role,  # Implement this function based on your logic
+                content=local_message.content,
+                # Include file_ids if you have attachments
+            )
+
+        return openai_thread
+    

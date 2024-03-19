@@ -1,6 +1,8 @@
 import configparser
 import os
+import uuid
 from types import SimpleNamespace
+import datetime
 
 class DynamicAttrDict:
     def __getattr__(self, name):
@@ -49,6 +51,35 @@ class DynamicAttrDict:
         if name not in self.__dict__:
             self.__dict__[name] = DynamicAttrDict()
         return self.__dict__[name]
+
+class Message:
+    def __init__(self, sender, recipient, message):
+        self.sender = sender
+        self.recipient = recipient
+        self.content = message
+        self.id = uuid.uuid4()
+        self.timestamp = datetime.datetime.now()
+class Thread:
+# class to manage conversation threads for llms
+    def __init__(self):
+        self.messages = []
+        self.members = []
+        self.id = uuid.uuid4()
+        self.creation_time = datetime.datetime.now()
+        self.last_message = datetime.datetime.now()
+
+    def add_message(self, message):
+        if message.sender not in self.members:
+            self.members.append(message.sender)
+        if message.recipient not in self.members:
+            self.members.append(message.recipient)
+        if len(self.messages) == 0:
+            self.speaks_first = message.sender
+        self.last_message = message.timestamp
+        self.messages.append(message)
+    
+    def __str__(self):
+        return f"Thread with members: {self.members} and messages: {self.messages}"
 
 class Environment:
 

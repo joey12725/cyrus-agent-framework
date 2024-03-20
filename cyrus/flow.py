@@ -47,6 +47,7 @@ class cFlow():
         vprint(f"Checking transitions for state: {state.name}")
         while not env.flow.kill_state:
             for transition in state.transitions:
+                #vprint("Checking transition")
                 if transition.check():
                     vprint(f"Transitioning from {transition.source.name} to {transition.destination.name} since condition is met")
                     env.flow.kill_state = True

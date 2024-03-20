@@ -3,6 +3,13 @@ import configparser
 from cyrus import *
 from rich.console import Console
 from rich.markdown import Markdown
+from openai import OpenAI
+import os
+from time import sleep
+os.environ["OPENAI_API_KEY"] = "REDACTED_OPENAI_KEY"
+
+client = OpenAI()
+
 
 global env
 env = Environment.getInstance()
@@ -19,4 +26,20 @@ def vprint(*args):
         if args == ():
             print()
         else:
-            render_markdown(" ".join(args))
+            render_markdown(" ".join([str(arg) for arg in args]))
+
+def open_ai_cleanup():
+    #delete all agents
+    for i in range(100):
+        try:
+            assistants = client.beta.assistants.list(limit=100)
+            print(len(assistants.data), "assistants found")
+            for assistant in assistants:
+                try:
+                    client.beta.assistants.delete(assistant.id)
+                    print("deleting assistant", assistant.id)
+                except Exception as e:
+                    print("unable to delete assistant", assistant.id)
+                    print(str(e)[:100])
+        except:
+            pass

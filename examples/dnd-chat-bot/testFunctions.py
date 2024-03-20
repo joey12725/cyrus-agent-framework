@@ -6,7 +6,7 @@ env = Environment.getInstance()
 # Test for turn function
 def test_turn():
     env.clear()  # Reset environment
-    env.messages.step = 1
+    env.messages.current_thread.turn = 1
     turn_function = turn(1)
     assert turn_function.run() == True, "Turn function failed for matching step"
 
@@ -186,7 +186,7 @@ test_index()
 # Output success message or handle assertion errors
 print("All non-agent tests passed successfully!")
 
-agent = Agent("agents/dm.agent")
+agent = Agent.create("dm")
 
 #test isCalled by asking the agent to "roll 3d6". In a seperate thread, watch the environment to see if the function is called.
 

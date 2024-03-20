@@ -7,9 +7,9 @@ import datetime
 class DynamicAttrDict:
     def __getattr__(self, name):
         if name not in self.__dict__:
+            # Only create a new DynamicAttrDict if the attribute doesn't exist
             self.__dict__[name] = DynamicAttrDict()
         return self.__dict__[name]
-
     def __setattr__(self, name, value):
         self.__dict__[name] = value
 
@@ -64,9 +64,12 @@ class Thread:
     def __init__(self):
         self.messages = []
         self.members = []
+        self.state=None
         self.id = uuid.uuid4()
         self.creation_time = datetime.datetime.now()
         self.last_message = datetime.datetime.now()
+        self.env = Environment.getInstance()
+        self.turn = 0
 
     def add_message(self, message):
         if message.sender not in self.members:
@@ -77,10 +80,31 @@ class Thread:
             self.speaks_first = message.sender
         self.last_message = message.timestamp
         self.messages.append(message)
+        self.turn += 1
+        self.env.messages.current_thread = self
+        
     
     def __str__(self):
-        return f"Thread with members: {self.members} and messages: {self.messages}"
-
+        return f"Thread with members: {self.members} and messages: {[f"Sender: {message.sender}, Recipient: {message.recipient}, Content: {message.content}" for message in self.messages]}"
+    
+    def dump(self, token_saver=False, charecter_limit=0):
+        ret = []
+        if not token_saver:
+            for message in self.messages:
+                ret.append(f"{message.sender} -> {message.recipient}: {message.content}")
+        elif token_saver and not charecter_limit:
+            for message in self.messages:
+                ret.append(f"{message.sender}: {message.content}")
+        elif token_saver and charecter_limit:
+            chars = 0
+            for message in self.messages:
+                chars += len(message.content)
+                if chars <= charecter_limit:
+                    ret.append(f"{message.sender}: {message.content}")
+                else:
+                    break
+        return "\n".join(ret)
+                
 class Environment:
 
     _instance = None
@@ -101,8 +125,8 @@ class Environment:
         self.flow = DynamicAttrDict()
         self.messages = DynamicAttrDict()
         self.messages.conversations = []
+        self.messages.current_thread = Thread()
         self.functions = []
-        self.messages.step = 0
         if os.path.exists(os.path.join(os.getcwd(), "config.ini")):
             self.configfile = configparser.ConfigParser()
             self.configfile.read(os.path.join(os.getcwd(), "config.ini"))
@@ -113,12 +137,18 @@ class Environment:
             self.config.token_limit = int(self.configfile["Settings"]["token_limit"].replace("\"",""))
         else:
             raise(Exception("config.ini not found"))
-
+        print("conversations", self.messages.conversations)
     def clear(self):
         # Explicitly clear or reset all managed attributes
         self.variables = DynamicAttrDict()
         self.function_status = DynamicAttrDict()
         self.messages = DynamicAttrDict()
+        self.messages.conversations = []
+        self.messages.current_thread = Thread()
+        self.functions = []
+        self.flow = DynamicAttrDict()
+        self.flow.kill_state = False
+        self.flow.current_state = self.flow.start_state
         #if self.functions exists
         if hasattr(self, 'functions'):
             for function in self.functions:
@@ -154,20 +184,73 @@ class Environment:
     def __str__(self):
         print(self.name, self.value)
 
-    def increment_step(self, message=None, sender=None, member1=None, member2=None, new_conversation=False):
-        self.messages.step += 1
+    def increment_step(self, message=None, sender=None, state = None, recipient=None, new_conversation=False, id=None):
         self.value = False
+        if state:
+            state = state.lower().replace(" ", "_")
         for function in self.function_status:
             if self.function_status.get_index(function) != "in progress":
                 self.function_status.set_value(function, False)
         if new_conversation:
-            self.messages.conversations.append({"member1": member1, "member2": member2, "messages": [{"sender": sender, "message": message}]})
-        else:
-            #find the conversation with the matching members and append the message and sender. Always prefer the newest conversation
-            for conversation in reversed(self.messages.conversations):
-                if conversation["member1"] == member1 and conversation["member2"] == member2:
-                    conversation["messages"].append({"sender": sender, "message": message})
-                    return
-                elif conversation["member1"] == member2 and conversation["member2"] == member1:
-                    conversation["messages"].append({"sender": sender, "message": message})
-                    return
+            self.messages.conversations.append(Thread())
+            self.messages.conversations[-1].state = state
+            self.messages.conversations[-1].add_message(Message(sender, recipient, message))
+        elif id==None:
+            #identify the most recent conversation from this state and users (sorted by last message time)
+            added_message = False
+            for conversation in sorted(self.messages.conversations, key=lambda x: x.last_message, reverse=True):
+                if conversation.state == state and conversation.members == [sender, recipient] or conversation.members == [recipient, sender]:
+                    conversation.add_message(Message(sender, recipient, message))
+                    break
+            if not added_message:
+                self.messages.conversations.append(Thread())
+                self.messages.conversations[-1].add_message(Message(sender, recipient, message))
+        elif id!=None:
+            for conversation in self.messages.conversations:
+                if conversation.id == id:
+                    conversation.add_message(Message(sender, recipient, message))
+                    break
+            if not added_message:
+                self.messages.conversations.append(Thread())
+                self.messages.conversations[-1].add_message(Message(sender, recipient, message))
+        return True
+    
+    def get_thread(self, id=None, state=None, members=None):
+        # Sort the conversations by last_message attribute (descending order)
+        sorted_conversations = sorted(self.messages.conversations, key=lambda x: x.last_message, reverse=True)
+
+        if id is not None:
+            for conversation in sorted_conversations:
+                if conversation.id == id:
+                    return conversation
+
+        best_match = None
+        best_match_score = 0
+
+        for conversation in sorted_conversations:
+            score = 0
+
+            if state is not None and conversation.state == state:
+                score += 2
+
+            if members is not None:
+                score += .5*len([member for member in members if member in conversation.members])
+
+            if score > best_match_score:
+                best_match = conversation
+                best_match_score = score
+
+        return best_match if best_match else Thread()
+
+    def get_agent_chat_history(self, agent):
+        #creates a new thread with the agent and every message that the agent has sent or recieved in the order that they were sent
+        thread = Thread()
+        for conversation in self.messages.conversations:
+            if agent in conversation.members:
+                for message in conversation.messages:
+                    if message.sender == agent or message.recipient == agent:
+                        thread.add_message(message)
+        #sort the messages by timestamp
+        thread.messages = sorted(thread.messages, key=lambda x: x.timestamp)
+        return thread
+    

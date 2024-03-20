@@ -1,7 +1,7 @@
 import os
 import sys
 import configparser
-from cyrus import Agent, State, Environment, cFlow, render_markdown, vprint
+from cyrus import Agent, State, Environment, cFlow, render_markdown, vprint, Thread
 from colorama import Fore, Style
 from rich.console import Console
 from rich.markdown import Markdown
@@ -18,10 +18,11 @@ class Action():
         self.agents = []
 
 class talks_to(Action):
-    def __init__(self, agent1, agent2, context="", load_memory=False, until = False, new_conversation=True):
+    def __init__(self, agent1, agent2, state=None, context="", load_memory=False, until = False, new_conversation=True):
         super().__init__()
         self.context = context
         self.until = until
+        self.state = state
         self.new_conversation = new_conversation
         if agent1 == "user" and agent2 == "user":
             raise Exception("Both agents cannot be user")
@@ -34,18 +35,46 @@ class talks_to(Action):
         else:
             self.conversation_type = "agent"
 
-        if env.config.memory_mode == "ephemeral" and env.messages.step == 0:
+        if env.config.memory_mode == "ephemeral" and new_conversation:
             if self.conversation_type == "user":
                 non_user_agent = agent1 if agent1 != "user" else agent2
                 user_speaks_first = True if agent1 == "user" else False
-                agent = Agent(os.path.join(os.getcwd(), "agents", non_user_agent.agent_filename.replace(".agent", "")))
+                agent = non_user_agent
+                agent.load_thread(Thread())
                 self.agent = agent
             else:
-                agent1 = Agent(os.path.join(os.getcwd(), "agents", agent1.agent_filename.replace(".agent", "")))
-                agent2 = Agent(os.path.join(os.getcwd(), "agents", agent2.agent_filename.replace(".agent", "")))
                 self.agent1 = agent1
                 self.agent2 = agent2
-        
+                self.agent1.load_thread(Thread())
+                self.agent2.load_thread(Thread())
+        elif env.config.memory_mode == "state-persistent" and new_conversation:
+            if self.conversation_type == "user":
+                non_user_agent = agent1 if agent1 != "user" else agent2
+                user_speaks_first = True if agent1 == "user" else False
+                agent = non_user_agent
+                agent.load_thread(env.get_thread(state = self.state, members=[agent.name, "user"]))
+                self.agent = agent
+            else:
+                self.agent1 = agent1
+                self.agent2 = agent2
+                thread = env.get_thread(state = self.state, members=[agent1.name, agent2.name])
+                self.agent1.load_thread(thread)
+                self.agent2.load_thread(thread)
+        elif env.config.memory_mode == "agent-persistent" and new_conversation:
+            if self.conversation_type == "user":
+                non_user_agent = agent1 if agent1 != "user" else agent2
+                user_speaks_first = True if agent1 == "user" else False
+                agent = non_user_agent
+                agent.load_thread(env.get_agent_chat_history(agent.name))
+                self.agent = agent
+            else:
+                self.agent1 = agent1
+                self.agent2 = agent2
+                thread1 = env.get_agent_chat_history(agent1.name)
+                thread2 = env.get_agent_chat_history(agent2.name)
+                self.agent1.load_thread(thread1)
+                self.agent2.load_thread(thread2)
+
     def run(self):
         if self.conversation_type == "user":
             self.step_conversation_user(self.agent)
@@ -75,11 +104,11 @@ class talks_to(Action):
         else:
             member1 = agent.name
             member2 = "user"
-        env.increment_step(member1=member1, member2=member2, message=user_input, sender="user", new_conversation=self.new_conversation)
+        env.increment_step(sender=member1, recipient=member2, message=user_input, new_conversation=self.new_conversation)
         self.new_conversation = False
         response = agent.get_response(user_input)
         render_markdown(f"**{agent.name}:**\n" + response)
-        env.increment_step(member1=member1, member2=member2, message=response, sender=agent.name)
+        env.increment_step(sender=member2, recipient=member1, message=response)
         if not self.until:
             return self.step_conversation_user(agent)
         else:
@@ -88,17 +117,22 @@ class talks_to(Action):
     def step_conversation_agent(self, agent1, agent2, context=""):
         if env.flow.kill_state:
             return
-        if context != "":
-            response = agent1.get_response("Initiatate a conversation with context:" + str(context))
+        self.thread = env.messages.current_thread if type(env.messages.current_thread) == Thread and agent1 in env.messages.current_thread.members and agent2 in env.messages.current_thread.members else None
+        if self.thread.turn == 0:
+            if context != "":
+                response = agent1.get_response("Initiatate a conversation with context:" + str(context))
+            else:
+                response = agent1.get_response("Initiatate a conversation")
         else:
-            response = agent1.get_response("Initiatate a conversation")
-        env.increment_step(member1=agent1.name, member2=agent2.name, message=response, sender=agent1.name, new_conversation=self.new_conversation)
+            response = self.thread.messages[-1].content
+            response = agent1.get_response(response)
+        env.increment_step(sender=agent2.name, recipient=agent1.name, message=response, new_conversation=self.new_conversation, state=self.state)
         self.new_conversation = False
         response = agent2.get_response(response)
-        env.increment_step(member1=agent1.name, member2=agent2.name, message=response, sender=agent2.name)
+        env.increment_step(sender=agent1.name, recipient=agent2.name, message=response, state=self.state)
         vprint(f"**{agent1.name}:**\n" + response)
 
-        if not self.until:
+        if not self.until and not env.flow.kill_state:
             return self.step_conversation_agent(agent1, agent2)
         else:
             return

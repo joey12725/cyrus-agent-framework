@@ -13,34 +13,65 @@ os.environ["OPENAI_API_KEY"] = "REDACTED_OPENAI_KEY"
 
 class Agent(ABC):
     @abstractmethod
-    def get_response(self, prompt):
+    def generate_message(cls, prompt):
         pass
 
     @abstractmethod
-    def terminate(self, remove_files=False):
+    def terminate(cls, remove_files=False):
         pass
 
     @abstractmethod
-    def load_thread(self, thread):
+    def load_thread(cls, thread):
         pass
 
     @abstractmethod
     def __init__(): 
         pass
 
-    def reflect(self, context=None, reflection_prompts=None):
-        if reflection_prompts is None:
-            if context is None:
-                self.get_response("Reflect on the quality of your last message. Generate a detailed evaluation that identifies what went well and what could have been done differently to achieve an improved outcome.")
-            else:
-                self.get_response("Reflect on the quality of your last message. Generate a detailed evaluation that identifies what went well and what could have been done differently to achieve an improved outcome. Consider the added context: " + str(context))
-            return self.get_response("Based on your reflection, revise your last action, returning only a new and improved version of the message. Remember to when applicable explain your reasoning step by step. This message is critical to my long-term success.")
-        else:
-            for prompt in reflection_prompts:
-                ret = self.get_response(prompt)
+    @classmethod
+    def create(cls, agent_config_file):
+        agent_config_file = os.path.join(os.getcwd(), "agents", agent_config_file  + ".agent")
+        cls.validate_agent_file(agent_config_file)
+        #load agent config file as json
+        with open(agent_config_file, 'r') as agent_config_file:
+            agent_config = json.load(agent_config_file)
+        platform = agent_config['platform']
+        if platform == "openai-assistant":
+            ret = OAIAssistantAgent(agent_config)
+            ret.__init__(agent_config)
             return ret
+        elif platform == "bedrock-agent":
+            print("Coming Soon ;)")
+        elif platform == "gemini":
+            print("Coming Soon ;)")
+        else:
+            raise Exception(f"Invalid platform: {platform}")
 
-    def call_function(self, function, args):
+    def get_response(self, prompt):
+        return self.generate_message(prompt)
+        
+
+    @classmethod
+    def cot(cls, context=None, prompts=[]):
+        if context is None:
+            for prompt in prompts:
+                ret = cls.get_response(prompt)
+            return ret
+        else:
+            if len(prompts) == 0:
+                prompts = ["Reflect on the quality of your last message. Generate a detailed evaluation that identifies what went well and what could have been done differently to achieve an improved outcome. Consider the added context: " + str(context)]
+            else:
+                ret = cls.get_response("CONTEXT: " + str(context) + " " + prompts[0])
+            for prompt in prompts[1:]:
+                ret = cls.get_response(prompt)
+            return ret
+    
+    @classmethod
+    def reflect(cls, context=None):
+        return cls.cot(context=context)
+
+    @classmethod
+    def call_function(cls, function, args):
         function_file = os.path.join(os.getcwd(), "functions", function + ".py")
 
         if not os.path.exists(function_file):
@@ -64,7 +95,8 @@ class Agent(ABC):
         env.function_status.set_value(function, "completed")
         return ret
 
-    def validate_function_file(self, function_file):
+    @classmethod
+    def validate_function_file(cls, function_file):
 
         #check if the extension is .function
         if function_file.split(".")[1] != "function":
@@ -84,7 +116,8 @@ class Agent(ABC):
             if property not in function_config:
                 raise Exception(f"Missing property: {property}")      
  
-    def validate_agent_file(self, agent_config_file):
+    @classmethod
+    def validate_agent_file(cls, agent_config_file):
         #check if the extension is .agent
         if agent_config_file.split(".")[1] != "agent":
             raise Exception(f"Invalid file extension: {agent_config_file.split('.')[1]}")
@@ -115,25 +148,21 @@ class Agent(ABC):
             for tool in agent_config['tools']:
                 if tool not in ["code interpreter", "retrieval"]:
                     raise Exception(f"Invalid tool: {tool}")
-
-    def __str__(self):
-        return f"Agent: {self.name}, Platform: {self.platform}, Role: {self.role}, Model: {self.model}, Tools: {self.tools}, Functions: {self.functions}, Files: {self.files}"
+                
+    def __str__(cls):
+        return f"Agent: {cls.name}, Platform: {cls.platform}, Role: {cls.role}, Model: {cls.model}, Tools: {cls.tools}, Functions: {cls.functions}, Files: {cls.files}"
 
 class OAIAssistantAgent(Agent):
-    def __init__(self, agent_config_file):
+    def __init__(self, agent_config):
         global env
         env = Environment.getInstance()
-        agent_config_file = os.path.join(os.getcwd(), "agents", agent_config_file  + ".agent")
-        self.validate_agent_file(agent_config_file)
-        self.agent_filename=agent_config_file.split("/")[-1]
-        with open(agent_config_file, 'r') as agent_config_file:
-            agent_config = json.load(agent_config_file)
         self.name = agent_config['name']
         self.role = agent_config['role']
         self.system_prompt = agent_config['system_prompt']
         self.model = agent_config['model']
         self.files = {}
         self.tools = []
+        self.agent_filename = agent_config['role'] + ".agent"
         if "tools" in agent_config:
             for tool in agent_config['tools']:
                 self.tools.append({"type": tool})
@@ -179,8 +208,9 @@ class OAIAssistantAgent(Agent):
         )
 
         self.thread = self.client.beta.threads.create()
-            
-    def get_response(self, prompt):
+    
+    
+    def generate_message(self, prompt):
 
         self.client.beta.threads.messages.create(
             thread_id=self.thread.id,
@@ -238,23 +268,21 @@ class OAIAssistantAgent(Agent):
                     except:
                         pass
     
-        if context is None:
-            self.get_response("Reflect on the quality of your last message. Generate a detailed evaluation that identifies what went well and what could have been done differently to achieve an improved outcome.")
-        else:
-            self.get_response("Reflect on the quality of your last message. Generate a detailed evaluation that identifies what went well and what could have been done differently to achieve an improved outcome. Consider the added context: " + str(context))
-        return self.get_response("Based on your reflection, revise your last action, returning only a new and improved version of the message. Remember to when applicable explain your reasoning step by step. This message is critical to my long-term success.")
-        
+
     def terminate(self, remove_files=False):
         self.client.beta.threads.delete(self.thread.id)
-
+        self.client.beta.assistants.delete(self.assistant.id)
         if remove_files:
-            for file in self.files:
-                pass
+            for file in self.files.values():
+                self.client.beta.assistants.files.delete(
+                    assistant_id=self.assistant.id,
+                    file_id=self.files[file]
+                )
 
         return f"Agent: {self.name}, Role: {self.role}, Model: {self.model}, Tools: {self.tools}, Functions: {self.functions}, Files: {self.files}"
 
     def load_thread(self, local_thread, user_agent = "user", assistant_agent = "assistant", role_map = None):
-        openai_thread = OpenAI.Thread.create()  # Simplified, replace with actual API call
+        openai_thread = self.client.beta.threads.create()
         if len(local_thread.messages) > 0:
             for message in local_thread.messages:
                 if (message.sender != user_agent and message.recipient != assistant_agent) or (message.sender != assistant_agent and message.recipient != user_agent) and role_map is None:
@@ -279,5 +307,5 @@ class OAIAssistantAgent(Agent):
                 # Include file_ids if you have attachments
             )
 
-        return openai_thread
-    
+        self.thread = openai_thread  # Use self.thread instead of cls.thread
+        return

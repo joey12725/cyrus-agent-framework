@@ -34,9 +34,10 @@ class turn(Function):
     def __init__(self, turn):
         self.turn = turn
         self.env = Environment.getInstance()
+        vprint("Turn:", self.env.messages.current_thread.turn)
+        self.env = Environment.getInstance()
     def run(self):
-        vprint(f"turn: {self.env.messages.step}")
-        return self.turn == self.env.messages.step
+        return self.turn == self.env.messages.current_thread.turn
     
 class and_(Function):
     def __init__(self, condition1, condition2):

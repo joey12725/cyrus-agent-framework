@@ -36,6 +36,7 @@ class Agent(ABC):
         with open(agent_config_file, 'r') as agent_config_file:
             agent_config = json.load(agent_config_file)
         platform = agent_config['platform']
+        cls.platform = platform
         if platform == "openai-assistant":
             ret = OAIAssistantAgent(agent_config)
             ret.__init__(agent_config)
@@ -259,7 +260,6 @@ class OAIAssistantAgent(Agent):
         messages = self.client.beta.threads.messages.list(
             thread_id=self.thread.id
         )
-        env.increment_step()
         for thread_message in messages.data:
             if thread_message.role == 'assistant':
                 for content in thread_message.content:

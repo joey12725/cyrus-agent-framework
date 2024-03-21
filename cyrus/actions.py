@@ -106,9 +106,10 @@ class talks_to(Action):
             member2 = "user"
         env.increment_step(sender=member1, recipient=member2, message=user_input, new_conversation=self.new_conversation)
         self.new_conversation = False
+        user_input = str(user_input)
         response = agent.get_response(user_input)
         render_markdown(f"**{agent.name}:**\n" + response)
-        env.increment_step(sender=member2, recipient=member1, message=response)
+        env.increment_step(sender=member2, recipient=member1, message=user_input, new_conversation=self.new_conversation)
         if not self.until:
             return self.step_conversation_user(agent)
         else:
@@ -117,8 +118,14 @@ class talks_to(Action):
     def step_conversation_agent(self, agent1, agent2, context=""):
         if env.flow.kill_state:
             return
-        self.thread = env.messages.current_thread if type(env.messages.current_thread) == Thread and agent1 in env.messages.current_thread.members and agent2 in env.messages.current_thread.members else None
-        if self.thread.turn == 0:
+        is_thread = type(env.messages.current_thread) == Thread
+        correct_members = agent1.name in env.messages.current_thread.members and agent2.name in env.messages.current_thread.members
+        no_members = env.messages.current_thread.members == []
+        if not is_thread or (not correct_members and not no_members):
+            env.messages.current_thread = Thread()
+            vprint("creating new thread")
+        self.thread = env.messages.current_thread
+        if self.thread.turn == 0 or self.new_conversation:
             if context != "":
                 response = agent1.get_response("Initiatate a conversation with context:" + str(context))
             else:
@@ -126,11 +133,13 @@ class talks_to(Action):
         else:
             response = self.thread.messages[-1].content
             response = agent1.get_response(response)
+
         env.increment_step(sender=agent2.name, recipient=agent1.name, message=response, new_conversation=self.new_conversation, state=self.state)
         self.new_conversation = False
+        vprint(f"**{agent1.name}:**\n" + response)
         response = agent2.get_response(response)
         env.increment_step(sender=agent1.name, recipient=agent2.name, message=response, state=self.state)
-        vprint(f"**{agent1.name}:**\n" + response)
+        vprint(f"**{agent2.name}:**\n" + response)
 
         if not self.until and not env.flow.kill_state:
             return self.step_conversation_agent(agent1, agent2)

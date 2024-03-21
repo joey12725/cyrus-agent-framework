@@ -4,8 +4,8 @@ import random
 env = Environment.getInstance()
 agent = Agent.create("dm")
 
-#action = talks_to("user", agent, context="Three goblins, armed with scimitars and shortbows, lurk in the camp; they have 7 HP each, AC 15, and can deal 1d6+2 slashing or piercing damage per attack.")    
-action = talks_to(agent, "self", context="Whoever talks first is the dungeon master. Set the scene for the player to inhabit. The (whoever speaks second) will then explain their charecter and begin playing. Remember, you are not both the DM and the player, you will assume the role of either the DM or the player. Remember to use your dice and include combat.")
+# action = talks_to("user", agent, context="Three goblins, armed with scimitars and shortbows, lurk in the camp; they have 7 HP each, AC 15, and can deal 1d6+2 slashing or piercing damage per attack.")    
+action = talks_to(agent, "self", context="Trade dnd theamed roasts/joking insults with the user. This is not a game of dnd, just some relaxing humor. This is not in charecter. Responses should be short and quippy.")
 #action = println("Hello World")
 action.run()
 

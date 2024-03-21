@@ -6,8 +6,11 @@ env = Environment.getInstance()
 # Test for turn function
 def test_turn():
     env.clear()  # Reset environment
-    env.messages.current_thread.turn = 1
-    turn_function = turn(1)
+    env.messages.current_thread.add_message(Message("a","b","c"))
+    env.messages.current_thread.add_message(Message("a","b","c"))
+    env.messages.current_thread.add_message(Message("a","b","c"))
+    env.messages.current_thread.add_message(Message("a","b","c"))
+    turn_function = turn(4)
     assert turn_function.run() == True, "Turn function failed for matching step"
 
 # Test for and_ function

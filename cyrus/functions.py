@@ -1,6 +1,7 @@
 import os
 import configparser
 from cyrus import Agent, Environment, vprint
+import random
 
 class Function():
     pass
@@ -34,10 +35,11 @@ class turn(Function):
     def __init__(self, turn):
         self.turn = turn
         self.env = Environment.getInstance()
-        vprint("Turn:", self.env.messages.current_thread.turn)
         self.env = Environment.getInstance()
     def run(self):
-        return self.turn == self.env.messages.current_thread.turn
+        if random.random() < 0.1:
+            vprint("thread:", str(self.env.messages.current_thread))
+        return self.turn == self.env.messages.current_thread.turn()
     
 class and_(Function):
     def __init__(self, condition1, condition2):

@@ -51,7 +51,6 @@ class DynamicAttrDict:
         if name not in self.__dict__:
             self.__dict__[name] = DynamicAttrDict()
         return self.__dict__[name]
-
 class Message:
     def __init__(self, sender, recipient, message):
         self.sender = sender
@@ -59,6 +58,9 @@ class Message:
         self.content = message
         self.id = uuid.uuid4()
         self.timestamp = datetime.datetime.now()
+    #equality is based on the sender, recipient, and content of the message
+    def __eq__(self, other):
+        return self.sender == other.sender and self.recipient == other.recipient and self.content == other.content
 class Thread:
 # class to manage conversation threads for llms
     def __init__(self):
@@ -69,7 +71,6 @@ class Thread:
         self.creation_time = datetime.datetime.now()
         self.last_message = datetime.datetime.now()
         self.env = Environment.getInstance()
-        self.turn = 0
 
     def add_message(self, message):
         if message.sender not in self.members:
@@ -80,9 +81,10 @@ class Thread:
             self.speaks_first = message.sender
         self.last_message = message.timestamp
         self.messages.append(message)
-        self.turn += 1
         self.env.messages.current_thread = self
         
+    def turn(self):
+        return len(self.messages)
     
     def __str__(self):
         return f"Thread with members: {self.members} and messages: {[f"Sender: {message.sender}, Recipient: {message.recipient}, Content: {message.content}" for message in self.messages]}"
@@ -132,7 +134,7 @@ class Environment:
             self.configfile.read(os.path.join(os.getcwd(), "config.ini"))
             self.config = DynamicAttrDict()
             self.config.memory_mode = self.configfile["Settings"]["memory_mode"].replace("\"","")
-            self.config.verbose = True if self.configfile["Settings"]["verbose"].replace("\"","") == "true" or self.config["Settings"]["verbose"].replace("\"","") == "True" else False
+            self.config.verbose = True if self.configfile["Settings"]["verbose"].replace("\"","").lower() == "true" else False
             self.export_env = True if self.configfile["Settings"]["export_env"].replace("\"","") == "true" or self.config["Settings"]["export_env"].replace("\"","") == "True" else False
             self.config.token_limit = int(self.configfile["Settings"]["token_limit"].replace("\"",""))
         else:
@@ -195,30 +197,35 @@ class Environment:
             self.messages.conversations.append(Thread())
             self.messages.conversations[-1].state = state
             self.messages.conversations[-1].add_message(Message(sender, recipient, message))
+            added_message = True
         elif id==None:
-            #identify the most recent conversation from this state and users (sorted by last message time)
             added_message = False
-            for conversation in sorted(self.messages.conversations, key=lambda x: x.last_message, reverse=True):
-                if conversation.state == state and conversation.members == [sender, recipient] or conversation.members == [recipient, sender]:
-                    conversation.add_message(Message(sender, recipient, message))
-                    break
-            if not added_message:
+            thread = self.get_thread(state=state, members=[sender, recipient])
+            if thread:
+                if message is not None and Message(sender, recipient, message) != thread.messages[-1]:
+                    thread.add_message(Message(sender, recipient, message))
+                    added_message = True
+            else:
                 self.messages.conversations.append(Thread())
+                self.messages.conversations[-1].state = state
                 self.messages.conversations[-1].add_message(Message(sender, recipient, message))
+                added_message = True
         elif id!=None:
             for conversation in self.messages.conversations:
                 if conversation.id == id:
                     conversation.add_message(Message(sender, recipient, message))
+                    added_message = True
                     break
             if not added_message:
                 self.messages.conversations.append(Thread())
                 self.messages.conversations[-1].add_message(Message(sender, recipient, message))
+                added_message = True
         return True
     
     def get_thread(self, id=None, state=None, members=None):
         # Sort the conversations by last_message attribute (descending order)
         sorted_conversations = sorted(self.messages.conversations, key=lambda x: x.last_message, reverse=True)
-
+        
         if id is not None:
             for conversation in sorted_conversations:
                 if conversation.id == id:
@@ -236,6 +243,11 @@ class Environment:
             if members is not None:
                 score += .5*len([member for member in members if member in conversation.members])
 
+            time_bonus = 0
+            if conversation.last_message:
+                time_bonus = 1 / (1+(datetime.datetime.now() - conversation.last_message).seconds)
+            score += time_bonus
+        
             if score > best_match_score:
                 best_match = conversation
                 best_match_score = score

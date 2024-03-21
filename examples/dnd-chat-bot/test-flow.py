@@ -9,7 +9,7 @@ env = Environment.getInstance()
 #Create the actions
 user_talks_to_dm = talks_to(dm, "user", context="Start by asking the user to describe their charecter, then, create an appropriate combat encounter and roll initative for them and the monster(s)")
 #previous_conversation = str(env.messages.conversations[0])
-dm_talks_to_self = talks_to(dm, "self", context="Have a quick quippy dnd themed (but not in charecter) roast competition with the person you are talking to.") 
+dm_talks_to_self = talks_to(dm, "self", context="THIS IS A TEST. START BY JUST SAYING 'COUNT 1', THEN, THE NEXT TO SPEAK WILL SAY 'COUNT 2', THE THIRD, 'COUNT 3', AND SO ON.") 
 print_completed = println("Completed flow")
 
 #Create the states

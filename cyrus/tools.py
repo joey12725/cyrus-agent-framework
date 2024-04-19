@@ -43,3 +43,13 @@ def open_ai_cleanup():
                     print(str(e)[:100])
         except:
             pass
+
+def remove_all(text, remove):
+    for r in remove:
+        text = text.replace(r, "")
+    return text
+
+def replace_all(text, dic):
+    for i, j in dic.items():
+        text = text.replace(i, j)
+    return text

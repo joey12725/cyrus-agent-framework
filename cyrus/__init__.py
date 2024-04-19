@@ -2,6 +2,7 @@
 from cyrus.environment import Environment
 from cyrus.tools import vprint
 from cyrus.tools import render_markdown
+from cyrus.tools import remove_all, replace_all
 from cyrus.agent import Agent
 from cyrus.flow import cFlow
 from cyrus.states import State

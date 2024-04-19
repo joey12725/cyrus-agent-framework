@@ -6,7 +6,7 @@ import sys
 import time
 import importlib.util
 import inspect
-from cyrus import Environment
+from cyrus import Environment, remove_all
 from abc import ABC, abstractmethod
 import boto3
 import tempfile
@@ -508,7 +508,7 @@ class BedrockAgent(Agent):
             with open(document_path, 'r') as file:
                 document_content = file.read()
 
-            knowledge_base_name = f"{self.name}-{document_file}-kb"
+            knowledge_base_name = f"{self.name.lower()}{remove_all(document_file.lower(), [".txt", ".", ","," ","-"])}"
             
         try:
             # Check if the knowledge base already exists
@@ -521,7 +521,82 @@ class BedrockAgent(Agent):
                         knowledge_base_id = kb['Id']
                         knowledge_base_exists = True
                         break
-            
+            role_name = f"{knowledge_base_name}-role-{str(uuid.uuid4())}"
+            response = self.iam_client.create_role(
+                RoleName=role_name,
+                AssumeRolePolicyDocument=json.dumps({
+                    "Version": "2012-10-17",
+                    "Statement": [{
+                        "Effect": "Allow",
+                        "Principal": {
+                            "Service": "bedrock.amazonaws.com"
+                        },
+                        "Action": "sts:AssumeRole",
+                        "Condition": {
+                            "StringEquals": {
+                                "aws:SourceAccount": "152161434693"
+                            },
+                            "ArnLike": {
+                                "AWS:SourceArn": "arn:aws:bedrock:us-east-1:152161434693:knowledge-base/*"
+                            }
+                        }
+                    }]
+                })
+            )
+
+            # Attach the first policy
+            self.iam_client.put_role_policy(
+                RoleName=role_name,
+                PolicyName='BedrockPolicy',
+                PolicyDocument=json.dumps({
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "bedrock:ListFoundationModels",
+                                "bedrock:ListCustomModels"
+                            ],
+                            "Resource": "*"
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "bedrock:InvokeModel"
+                            ],
+                            "Resource": [
+                                "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v1",
+                                "arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-english-v3",
+                                "arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-multilingual-v3"
+                            ]
+                        }
+                    ]
+                })
+            )
+
+            # Attach the second policy
+            self.iam_client.put_role_policy(
+                RoleName=role_name,
+                PolicyName='S3Policy',
+                PolicyDocument=json.dumps({
+                    "Version": "2012-10-17",
+                    "Statement": [{
+                        "Effect": "Allow",
+                        "Action": [
+                            "s3:GetObject",
+                            "s3:ListBucket",
+                            "s3:PutObject",
+                            "s3:DeleteObject"
+                        ],
+                        "Resource": [
+                            "arn:aws:s3:::*",
+                            "arn:aws:s3:::*/*"
+                        ]
+                    }]
+                })
+            )
+
+            role_arn = response['Role']['Arn']
             if not knowledge_base_exists:
                 # Create a new knowledge base
                 response = self.bedrock_client.create_knowledge_base(
@@ -531,12 +606,13 @@ class BedrockAgent(Agent):
                     knowledgeBaseConfiguration= { 
                         "type": "VECTOR",
                         "vectorKnowledgeBaseConfiguration": { 
-                            "embeddingModelArn": "[PROVISION]"
+                            "embeddingModelArn": "arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-english-v3" #cohere Embed English
                         },
                     },
                     storageConfiguration={ 
+                        "type": "OPENSEARCH_SERVERLESS",
                         "opensearchServerlessConfiguration": { 
-                            "collectionArn": "[PROVISION]",
+                            "collectionArn": "arn:aws:aoss:us-east-1:152161434693:collection/gi9bfqtno8ce7ivlogzl",
                             "fieldMapping": { 
                                 "metadataField": "metadata",
                                 "textField": "text",
@@ -759,3 +835,15 @@ class GeminiAgent(Agent):
     def load_thread(self, thread):
         pass
  
+class BedrockChatAgent(Agent):
+    def __init__(self, agent_config):
+        pass
+
+    def generate_message(self, prompt):
+        pass
+
+    def terminate(self, remove_files=False):
+        pass
+
+    def load_thread(self, thread):
+        pass

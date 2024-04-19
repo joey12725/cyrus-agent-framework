@@ -338,7 +338,7 @@ class OAIAssistantAgent(Agent):
         return
     
 
-class BedrockAgent(Agent):
+class BedrockAgent(Agent): 
     def __init__(self, agent_config):
 
         self.name = agent_config['name']

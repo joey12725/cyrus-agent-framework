@@ -52,11 +52,12 @@ class DynamicAttrDict:
             self.__dict__[name] = DynamicAttrDict()
         return self.__dict__[name]
 class Message:
-    def __init__(self, sender, recipient, message):
+    def __init__(self, sender, recipient, message, files=[]):
         self.sender = sender
         self.recipient = recipient
         self.content = message
         self.id = uuid.uuid4()
+        self.files = files
         self.timestamp = datetime.datetime.now()
     #equality is based on the sender, recipient, and content of the message
     def __eq__(self, other):
@@ -106,6 +107,9 @@ class Thread:
                 else:
                     break
         return "\n".join(ret)
+
+    def get_all_files(self):
+        return [file for message in self.messages for file in message.files]
                 
 class Environment:
 

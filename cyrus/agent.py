@@ -6,15 +6,15 @@ import sys
 import time
 import importlib.util
 import inspect
-from cyrus import Environment, remove_all
+from cyrus import Environment, remove_all, Message, Thread
 from abc import ABC, abstractmethod
-import boto3
-import tempfile
-import uuid
-import zipfile
-import subprocess
-import venv
-import shutil
+from vertexai.generative_models import (
+    GenerationConfig,
+    GenerativeModel,
+    HarmBlockThreshold,
+    HarmCategory,
+    Part,
+)
 #set api key eviroment variable (REMOVE BEFORE NEXT COMMIT)
 os.environ["OPENAI_API_KEY"] = "REDACTED_OPENAI_KEY"
 
@@ -338,512 +338,94 @@ class OAIAssistantAgent(Agent):
         return
     
 
-class BedrockAgent(Agent): 
-    def __init__(self, agent_config):
 
-        self.name = agent_config['name']
-        self.role = agent_config['role']
-        self.system_prompt = agent_config['system_prompt']
-        self.model = agent_config['model']
-        
-        self.lambda_client = boto3.client('lambda')
-        self.iam_client = boto3.client('iam')
-        self.function_arns = {}
+import os
+import uuid
+from vertexai.generative_models import (
+    GenerationConfig,
+    GenerativeModel,
+    HarmBlockThreshold,
+    HarmCategory,
+    Part,
+)
 
-        for function_file in agent_config.get('functions', []):
-            function_path = os.path.join(os.getcwd(), "functions", function_file + ".function")
-            with open(function_path, 'r') as file:
-                function_data = json.load(file)
-
-            # Add an 'id' field to the function data if it doesn't exist
-            if 'id' not in function_data:
-                function_data['id'] = str(uuid.uuid4())
-                with open(function_path, 'w') as file:
-                    json.dump(function_data, file)
-
-            function_name = f"{function_file}-{function_data['id']}"
-            
-            # Create a new IAM role for the Lambda function
-            role_name = f"{function_name}-role"
-            try:
-                response = self.iam_client.create_role(
-                    RoleName=role_name,
-                    AssumeRolePolicyDocument=json.dumps({
-                        "Version": "2012-10-17",
-                        "Statement": [
-                            {
-                                "Effect": "Allow",
-                                "Principal": {
-                                    "Service": "lambda.amazonaws.com"
-                                },
-                                "Action": "sts:AssumeRole"
-                            }
-                        ]
-                    })
-                )
-                role_arn = response['Role']['Arn']
-                
-                # Attach necessary permissions to the role
-                self.iam_client.attach_role_policy(
-                    RoleName=role_name,
-                    PolicyArn="arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-                )
-            except self.iam_client.exceptions.EntityAlreadyExistsException:
-                # If the role already exists, retrieve its ARN
-                response = self.iam_client.get_role(RoleName=role_name)
-                role_arn = response['Role']['Arn']
-            
-            # Create a Lambda layer if dependencies are specified
-            layer_arn = None
-            if 'dependencies' in function_data:
-                layer_name = f"{function_name}-layer"
-                layer_zip = self._create_layer_package(function_data['dependencies'])
-                try:
-                    response = self.lambda_client.publish_layer_version(
-                        LayerName=layer_name,
-                        Content={
-                            'ZipFile': layer_zip
-                        },
-                        CompatibleRuntimes=['python3.8']  # Specify the appropriate runtime
-                    )
-                    layer_arn = response['LayerVersionArn']
-                except self.lambda_client.exceptions.ResourceConflictException:
-                    # If the layer already exists, retrieve its ARN
-                    response = self.lambda_client.list_layer_versions(LayerName=layer_name)
-                    layer_arn = response['LayerVersions'][0]['LayerVersionArn']
-
-            try:
-                # Check if the Lambda function already exists
-                response = self.lambda_client.get_function(FunctionName=function_name)
-                function_arn = response['Configuration']['FunctionArn']
-                self.function_arns[function_file] = function_arn
-            except self.lambda_client.exceptions.ResourceNotFoundException:
-                # Create the Lambda function if it doesn't exist
-                kwargs = {
-                    'FunctionName': function_name,
-                    'Runtime': 'python3.8',  # Specify the appropriate runtime
-                    'Role': role_arn,
-                    'Handler': f"{function_file}.lambda_handler",
-                    'Code': {
-                        'ZipFile': self._create_deployment_package(function_file)
-                    }
-                }
-                if layer_arn:
-                    kwargs['Layers'] = [layer_arn]
-                response = self.lambda_client.create_function(**kwargs)
-                function_arn = response['FunctionArn']
-                self.function_arns[function_file] = function_arn
-
-            # Create the OpenAPI schema for the Lambda function
-            openapi_schema = {
-                "openapi": "3.0.0",
-                "info": {
-                    "title": function_data["name"],
-                    "version": "1.0.0",
-                    "description": function_data["description"]
-                },
-                "paths": {
-                    "/": {
-                        "post": {
-                            "summary": f"Invoke the {function_data['name']} Lambda function",
-                            "operationId": f"{function_data['name']}_invoke",
-                            "requestBody": {
-                                "content": {
-                                    "application/json": {
-                                        "schema": function_data["parameters"]
-                                    }
-                                },
-                                "required": True
-                            },
-                            "responses": {
-                                "200": {
-                                    "description": "Successful response",
-                                    "content": {
-                                        "application/json": {
-                                            "schema": {
-                                                "$ref": "#/components/schemas/Response"
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                "components": {
-                    "schemas": {
-                        "Response": {
-                            "type": "object",
-                            "properties": {
-                                "statusCode": {
-                                    "type": "integer"
-                                },
-                                "body": {
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            # Update the Lambda function configuration with the OpenAPI schema
-            response = self.lambda_client.update_function_configuration(
-                FunctionName=function_name,
-                Description=function_data["description"],
-                Handler=f"{function_file}.lambda_handler",
-                Runtime="python3.8",
-                Environment={
-                    "Variables": {
-                        "OPENAPI_SCHEMA": json.dumps(openapi_schema)
-                    }
-                }
-            )
-
-        self.knowledge_base_ids = {}
-        self.bedrock_client = boto3.client('bedrock-agent')
-
-        for document_file in agent_config.get('documents', []):
-            document_path = os.path.join(os.getcwd(), "documents", document_file)
-            with open(document_path, 'r') as file:
-                document_content = file.read()
-
-            knowledge_base_name = f"{self.name.lower()}{remove_all(document_file.lower(), [".txt", ".", ","," ","-"])}"
-            
-        try:
-            # Check if the knowledge base already exists
-            response = self.bedrock_client.list_knowledge_bases()
-            existing_knowledge_bases = response['knowledgeBaseSummaries']
-            knowledge_base_exists = False
-            if existing_knowledge_bases:
-                for kb in existing_knowledge_bases:
-                    if kb['Name'] == knowledge_base_name:
-                        knowledge_base_id = kb['Id']
-                        knowledge_base_exists = True
-                        break
-            role_name = f"{knowledge_base_name}-role-{str(uuid.uuid4())}"
-            response = self.iam_client.create_role(
-                RoleName=role_name,
-                AssumeRolePolicyDocument=json.dumps({
-                    "Version": "2012-10-17",
-                    "Statement": [{
-                        "Effect": "Allow",
-                        "Principal": {
-                            "Service": "bedrock.amazonaws.com"
-                        },
-                        "Action": "sts:AssumeRole",
-                        "Condition": {
-                            "StringEquals": {
-                                "aws:SourceAccount": "152161434693"
-                            },
-                            "ArnLike": {
-                                "AWS:SourceArn": "arn:aws:bedrock:us-east-1:152161434693:knowledge-base/*"
-                            }
-                        }
-                    }]
-                })
-            )
-
-            # Attach the first policy
-            self.iam_client.put_role_policy(
-                RoleName=role_name,
-                PolicyName='BedrockPolicy',
-                PolicyDocument=json.dumps({
-                    "Version": "2012-10-17",
-                    "Statement": [
-                        {
-                            "Effect": "Allow",
-                            "Action": [
-                                "bedrock:ListFoundationModels",
-                                "bedrock:ListCustomModels"
-                            ],
-                            "Resource": "*"
-                        },
-                        {
-                            "Effect": "Allow",
-                            "Action": [
-                                "bedrock:InvokeModel"
-                            ],
-                            "Resource": [
-                                "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v1",
-                                "arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-english-v3",
-                                "arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-multilingual-v3"
-                            ]
-                        }
-                    ]
-                })
-            )
-
-            # Attach the second policy
-            self.iam_client.put_role_policy(
-                RoleName=role_name,
-                PolicyName='S3Policy',
-                PolicyDocument=json.dumps({
-                    "Version": "2012-10-17",
-                    "Statement": [{
-                        "Effect": "Allow",
-                        "Action": [
-                            "s3:GetObject",
-                            "s3:ListBucket",
-                            "s3:PutObject",
-                            "s3:DeleteObject"
-                        ],
-                        "Resource": [
-                            "arn:aws:s3:::*",
-                            "arn:aws:s3:::*/*"
-                        ]
-                    }]
-                })
-            )
-
-            role_arn = response['Role']['Arn']
-            if not knowledge_base_exists:
-                # Create a new knowledge base
-                response = self.bedrock_client.create_knowledge_base(
-                    name=knowledge_base_name,
-                    description=f"Knowledge base for {document_file}",
-                    roleArn=role_arn,
-                    knowledgeBaseConfiguration= { 
-                        "type": "VECTOR",
-                        "vectorKnowledgeBaseConfiguration": { 
-                            "embeddingModelArn": "arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-english-v3" #cohere Embed English
-                        },
-                    },
-                    storageConfiguration={ 
-                        "type": "OPENSEARCH_SERVERLESS",
-                        "opensearchServerlessConfiguration": { 
-                            "collectionArn": "arn:aws:aoss:us-east-1:152161434693:collection/gi9bfqtno8ce7ivlogzl",
-                            "fieldMapping": { 
-                                "metadataField": "metadata",
-                                "textField": "text",
-                                "vectorField": "vector",
-                            },
-                            "vectorIndexName": document_file
-                        }
-                    }
-                )
-                
-                # Wait for the knowledge base to be created
-                while True:
-                    response = self.bedrock_client.get_knowledge_base(
-                        Id=knowledge_base_id
-                    )
-                    if response['Status'] == 'Active':
-                        break
-                    time.sleep(1)
-                
-                # Add the document content to the knowledge base
-                response = self.bedrock_client.create_content(
-                    KnowledgeBaseId=knowledge_base_id,
-                    Name=document_file,
-                    ContentType='PLAIN_TEXT',
-                    Content=document_content
-                )
-            
-            self.knowledge_base_ids[document_file] = knowledge_base_id
-
-        except self.bedrock_client.exceptions.ResourceNotFoundException:
-            # Handle the case when the knowledge base doesn't exist
-            print(f"Knowledge base {knowledge_base_name} not found.")
-
-        except self.bedrock_client.exceptions.ConflictException:
-            # Handle the case when the knowledge base already exists
-            print(f"Knowledge base {knowledge_base_name} already exists.")
-
-
-        # Create the Bedrock agent
-        try:
-            response = self.bedrock_client.create_agent(
-                Name=self.name,
-                Description=self.system_prompt,
-                LongDescription=self.system_prompt,
-                BotType='BEDROCK',
-                IdleSessionTTLInSeconds=300,
-                PrivacyPolicy='none',
-                InstancePolicy={
-                    'OriginRestrictions': [{
-                        'URIs': ['*']
-                    }]
-                },
-                DataPrivacy={
-                    'ChildDirected': False
-                },
-                StartingIntent={
-                    'IntentName': 'Default'
-                },
-                EnabledLocales=['en_US']
-            )
-            self.agent_id = response['Id']
-
-            # Attach Lambda functions to the agent
-            for function_name, function_arn in self.function_arns.items():
-                response = self.bedrock_client.create_function_association(
-                    FunctionName=function_name,
-                    FunctionARN=function_arn,
-                    SkillId=self.agent_id
-                )
-
-            # Attach knowledge bases to the agent
-            for document_file, knowledge_base_id in self.knowledge_base_ids.items():
-                response = self.bedrock_client.associate_knowledge_base(
-                    BotId=self.agent_id,
-                    BotVersion='DRAFT',
-                    KnowledgeBaseId=knowledge_base_id
-                )
-
-            # Build the agent
-            response = self.bedrock_client.build_agent(
-                BotId=self.agent_id,
-                BotVersion='DRAFT'
-            )
-
-            # Wait for the agent to be built
-            while True:
-                response = self.bedrock_client.describe_agent(
-                    BotId=self.agent_id,
-                    BotVersion='DRAFT'
-                )
-                if response['Status'] == 'Available':
-                    break
-                time.sleep(1)
-
-            # Assign the agent to self.agent
-            self.agent = response['Bot']
-
-        except self.bedrock_client.exceptions.ConflictException:
-            # Handle the case when the agent already exists
-            print(f"Agent {self.name} already exists.")
-
-        except self.bedrock_client.exceptions.ServiceQuotaExceededException:
-            # Handle the case when the service quota is exceeded
-            print("Service quota exceeded. Please check your AWS account limits.")
-    
-    def generate_message(self, prompt, session_id=None):
-
-        if session_id is None:
-            session_id = str(uuid.uuid4())  # Generate a new session ID if not provided
-
-        try:
-            response = self.bedrock_client.post_text(
-                botId=self.agent_id,
-                botAliasId=self.agent['botAliasId'],
-                localeId='en_US',
-                sessionId=session_id,
-                text=prompt
-            )
-
-            message = response['message']
-            session_state = response['sessionState']
-
-            # Process the response and session state as needed
-            # ...
-
-            return message
-
-        except self.bedrock_client.exceptions.NotFoundException:
-            raise Exception(f"Agent '{self.name}' not found.")
-
-        except self.bedrock_client.exceptions.BadRequestException as e:
-            raise Exception(f"Invalid request: {str(e)}")
-
-        except self.bedrock_client.exceptions.InternalServerException as e:
-            raise Exception(f"Internal server error: {str(e)}")
-
-    def terminate(self, remove_files=False):
-        print("Terminating Bedrock agent... (eventually)")
-    
-    def load_thread(self, thread):
-        print("Loading thread into Bedrock agent... (eventually)")
-
-    def _create_layer_package(self, dependencies):
-
-        # Create a temporary directory for the virtual environment
-        temp_dir = tempfile.mkdtemp()
-
-        # Create virtual environment
-        venv_dir = os.path.join(temp_dir, "venv")
-        subprocess.run(["python3", "-m", "venv", venv_dir], check=True)
-
-        # Install dependencies using pip from the virtual environment
-        pip_executable = os.path.join(venv_dir, "bin", "pip")  # Use "Scripts\\pip.exe" on Windows
-        
-        for dependency in dependencies:
-            try:
-                subprocess.run([pip_executable, "install", dependency], check=True, stderr=subprocess.PIPE)
-            except subprocess.CalledProcessError as e:
-                print(f"Failed to install {dependency}: {e.stderr.decode()}")
-
-        # Prepare directory for Lambda Layer
-        layer_name = str(uuid.uuid4())
-        layer_dir = os.path.join(temp_dir, layer_name)
-        os.makedirs(layer_dir, exist_ok=True)
-        site_packages_dir = os.path.join(venv_dir, "lib", os.listdir(os.path.join(venv_dir, "lib"))[0], "site-packages")
-        shutil.copytree(site_packages_dir, os.path.join(layer_dir, "python"))
-
-        # Determine the correct path for saving the zip file
-        zip_file_name = f"{layer_name}_layer.zip"
-        layer_zip_path = os.path.join(os.path.dirname(__file__), zip_file_name)  # Adjust the path as needed
-
-        # Create zip file
-        shutil.make_archive(base_name=layer_name, format="zip", root_dir=temp_dir, base_dir=layer_name)
-
-        # Move the zip file to the desired location
-        shutil.move(f"{layer_name}.zip", layer_zip_path)
-
-        
-        with open(layer_zip_path, "rb") as layer_zip:
-            layer_content = layer_zip.read()
-
-        # Clean up
-        shutil.rmtree(temp_dir)
-
-        return layer_content
-    
-    def _create_deployment_package(self, function_file):
-        # Create a temporary directory for the deployment package
-        temp_dir = tempfile.mkdtemp()
-
-        # Copy the function file to the temporary directory
-        shutil.copy(os.path.join(os.getcwd(), "functions", function_file + ".py"), temp_dir)
-
-        # Create the deployment package zip file
-        zip_file_name = f"{function_file}_deployment_package.zip"
-        deployment_package_path = os.path.join(os.path.dirname(__file__), zip_file_name)
-        shutil.make_archive(base_name=function_file, format="zip", root_dir=temp_dir)
-
-        # Move the zip file to the desired location
-        shutil.move(f"{function_file}.zip", deployment_package_path)
-
-        # Read the deployment package content
-        with open(deployment_package_path, "rb") as deployment_package:
-            deployment_package_content = deployment_package.read()
-
-        # Clean up the temporary directory
-        shutil.rmtree(temp_dir)
-
-        return deployment_package_content
 class GeminiAgent(Agent):
     def __init__(self, agent_config):
-        pass
+        global env
+        env = Environment.getInstance()
+        self.name = agent_config['name']
+        self.role = agent_config['role']
+        self.system_instruction = agent_config['system_instruction']
+        self.model_id = agent_config['model_id']
+        self.files = {}
+        self.agent_filename = agent_config['role'] + ".agent"
+        self.generation_config = GenerationConfig(
+            temperature=agent_config.get('temperature', 0.9),
+            top_p=agent_config.get('top_p', 1.0),
+            top_k=agent_config.get('top_k', 32),
+            candidate_count=agent_config.get('candidate_count', 1),
+            max_output_tokens=agent_config.get('max_output_tokens', 8192),
+        )
+        self.safety_settings = {
+            HarmCategory.HARM_CATEGORY_HARASSMENT: agent_config.get('harassment_threshold', HarmBlockThreshold.BLOCK_LOW_AND_ABOVE),
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: agent_config.get('hate_speech_threshold', HarmBlockThreshold.BLOCK_LOW_AND_ABOVE),
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: agent_config.get('sexually_explicit_threshold', HarmBlockThreshold.BLOCK_LOW_AND_ABOVE),
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: agent_config.get('dangerous_content_threshold', HarmBlockThreshold.BLOCK_LOW_AND_ABOVE),
+        }
+        self.model = GenerativeModel(
+            self.model_id,
+            system_instruction=self.system_instruction,
+        )
+        if "files" in agent_config:
+            for filename in agent_config['files']:
+                file_bytes = env.files.get_value(filename)
+                if file_bytes:
+                    self.files[filename] = file_bytes
+                    print(f"Loaded {filename} from environment")
+                else:
+                    print(f"File {filename} not found in environment")
+        self.thread = Thread()
 
     def generate_message(self, prompt):
-        pass
+        contents = []
+        for filename, file_bytes in self.files.items():
+            file_ext = os.path.splitext(filename)[1][1:].lower()
+            if file_ext in ['mp3', 'wav', 'ogg']:
+                mime_type = f'audio/{file_ext}'
+            elif file_ext in ['mp4', 'avi', 'mov']:
+                mime_type = f'video/{file_ext}'
+            elif file_ext == 'pdf':
+                mime_type = 'application/pdf'
+            elif file_ext in ['png', 'jpg', 'jpeg', 'gif']:
+                mime_type = f'image/{file_ext}'
+            else:
+                print(f"Warning: Unsupported file type {file_ext} for file {filename}. Ignoring.")
+                continue
+
+            file_part = Part.from_bytes(file_bytes, mime_type=mime_type)
+            contents.append(file_part)
+
+        messages = self.thread.dump(token_saver=True, charecter_limit=self.generation_config.max_output_tokens)
+        contents.append(messages)
+        contents.append(prompt)
+
+        response = self.model.generate_content(
+            contents,
+            generation_config=self.generation_config,
+            safety_settings=self.safety_settings,
+        )
+
+        self.thread.add_message(Message(self.name, 'user', prompt))
+        self.thread.add_message(Message('user', self.name, response.text))
+
+        return response.text
 
     def terminate(self, remove_files=False):
-        pass
+        if remove_files:
+            self.files = {}
 
     def load_thread(self, thread):
-        pass
- 
-class BedrockChatAgent(Agent):
-    def __init__(self, agent_config):
-        pass
+        self.thread = thread
 
-    def generate_message(self, prompt):
-        pass
-
-    def terminate(self, remove_files=False):
-        pass
-
-    def load_thread(self, thread):
-        pass
+    def add_file(self, filename, file_bytes):
+        self.files[filename] = file_bytes

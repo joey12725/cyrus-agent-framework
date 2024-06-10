@@ -1,27 +1,32 @@
 import os
 import configparser
-from cyrus import Agent, Environment, vprint
 import random
+import uuid
+import datetime
+from cyrus import Agent, Environment, vprint
 
-class Function():
+class Function:
     pass
-#GENERATE AND PREDICT WILL BE INTRODUCED LATER WITH THE INTEGRATION OF ADDITIONAL MODELS, MULTIMODALITY, AND OTHER FEATURES
+
 class generate(Function):
     def __init__(self, model, prompt):
         self.model = model
         self.prompt = prompt
     def run(self):
         pass
+
 class predict(Function):
-            def __init__(self, model, data):
-                self.model = model
-                self.data = data
+    def __init__(self, model, data):
+        self.model = model
+        self.data = data
+
 class is_called(Function):
     def __init__(self, function):
         self.function = function
         self.env = Environment.getInstance()
     def run(self):
-        return bool(self.env.function_status.get_index(self.function))
+        return bool(self.env.function_status.get(self.function, False))
+
 class returns(Function):
     def __init__(self, function, value):
         self.function = function
@@ -29,18 +34,18 @@ class returns(Function):
         self.env = Environment.getInstance()
     def run(self):
         if self.value == "*":
-            return self.env.function_status.get_index(self.function) == "completed"
-        return self.env.value == self.value and self.env.function_status.get_index(self.function) == "completed"
+            return self.env.function_status.get(self.function) == "completed"
+        return self.env.variables.get('value') == self.value and self.env.function_status.get(self.function) == "completed"
+
 class turn(Function):
     def __init__(self, turn):
         self.turn = turn
         self.env = Environment.getInstance()
-        self.env = Environment.getInstance()
     def run(self):
         if random.random() < 0.1:
-            vprint("thread:", str(self.env.messages.current_thread))
-        return self.turn == self.env.messages.current_thread.turn()
-    
+            vprint("thread:", str(self.env.messages["current_thread"]))
+        return self.turn == self.env.messages["current_thread"].turn()
+
 class and_(Function):
     def __init__(self, condition1, condition2):
         self.condition1 = condition1
@@ -140,21 +145,24 @@ class mod(Function):
         self.value2 = value2
     def run(self):
         return self.value1 % self.value2
+
 class in_(Function):
-    def __init__(self, value, list):
+    def __init__(self, value, list_):
         self.value = value
-        self.list = list
+        self.list = list_
     def run(self):
         return self.value in self.list
+
 class not_in_(Function):
-    def __init__(self, value, list):
+    def __init__(self, value, list_):
         self.value = value
-        self.list = list
+        self.list = list_
     def run(self):
         return self.value not in self.list
+
 class index(Function):
-    def __init__(self, dict, key):
-        self.dict = dict
+    def __init__(self, dict_, key):
+        self.dict = dict_
         self.key = key
     def run(self):
         return self.dict[self.key]

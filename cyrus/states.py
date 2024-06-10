@@ -1,16 +1,16 @@
 import os
 import configparser
-from cyrus import * #, Enviroment
+from cyrus import *  # , Enviroment
 import threading
 from time import sleep
 
-class State():
+class State:
     def __init__(self, name, actions):
         self.name = name
         self.actions = actions
         global env
         env = Environment.getInstance()
-        env.flow.kill_state = False
+        env.flow["kill_state"] = False
         global flow
         flow = cFlow.getInstance()
         self.transitions = [transition for transition in flow.transitions if transition.source == self]
@@ -18,11 +18,9 @@ class State():
     def update_transitions(self):
         self.transitions = [transition for transition in flow.transitions if transition.source == self]
 
-                    
-    def run(self):
+    async def run(self):
         vprint(f"self.actions: {self.actions}")
         for action in self.actions:
             vprint(f"Running action: {str(action)}")
-            action.run()
+            await action.run()
         return True
- 

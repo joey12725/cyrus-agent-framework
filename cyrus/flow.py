@@ -1,27 +1,28 @@
 from cyrus import Agent, Environment, vprint
-import os 
+import os
 import configparser
 import concurrent.futures
 import threading
 import time
 import matplotlib.pyplot as plt
 import networkx as nx
-from time import sleep
+import asyncio
 
-class cFlow():
-
+class cFlow:
     instance = None
+
+    @staticmethod
     def getInstance(states=[], start_state=None, transitions=[]):
-        if cFlow.instance == None:
+        if cFlow.instance is None:
             cFlow.instance = cFlow(states, start_state, transitions)
-        if cFlow.instance.states == [] and states != []:
+        if not cFlow.instance.states and states:
             cFlow.instance.states = states
             vprint("updated states")
-        if cFlow.instance.start_state == None and start_state != None:
+        if not cFlow.instance.start_state and start_state:
             cFlow.instance.start_state = start_state
-            env.flow.current_state = start_state
+            env.flow['current_state'] = start_state
             vprint("updated start_state")
-        if cFlow.instance.transitions == [] and transitions != []:
+        if not cFlow.instance.transitions and transitions:
             cFlow.instance.transitions = transitions
             for state in cFlow.instance.states:
                 state.update_transitions()
@@ -34,50 +35,47 @@ class cFlow():
         self.transitions = transitions
         global env
         env = Environment.getInstance()
-        env.flow.current_state = start_state
+        env.flow['current_state'] = start_state
         config = configparser.ConfigParser()
         config.read(os.path.join(os.getcwd(), "config.ini"))
         vprint("initialized flow")
 
-    def run_state_actions(self, state):
+    async def run_state_actions(self, state):
         vprint(f"Running state actions: {state.name}")
-        state.run()
+        await state.run()
 
-    def check_transitions(self, state):
+    async def check_transitions(self, state):
         vprint(f"Checking transitions for state: {state.name}")
-        while not env.flow.kill_state:
+        while not env.flow['kill_state']:
             for transition in state.transitions:
-                #vprint("Checking transition")
-                if transition.check():
+                if await transition.check():
                     vprint(f"Transitioning from {transition.source.name} to {transition.destination.name} since condition is met")
-                    env.flow.kill_state = True
-                    env.flow.current_state = transition.destination
+                    env.flow['kill_state'] = True
+                    env.flow['current_state'] = transition.destination
                     return
-            time.sleep(0.1)
+            await asyncio.sleep(0.1)
 
-    def run(self):
-        env.flow.kill_state = False
-        current_state = env.flow.current_state
+    async def run(self):
+        env.flow['kill_state'] = False
+        current_state = env.flow['current_state']
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            while True:
-                vprint(f"Starting state: {current_state.name}")
-                actions_future = executor.submit(self.run_state_actions, current_state)
-                transitions_future = executor.submit(self.check_transitions, current_state)
+        while True:
+            vprint(f"Starting state: {current_state.name}")
+            actions_task = asyncio.create_task(self.run_state_actions(current_state))
+            transitions_task = asyncio.create_task(self.check_transitions(current_state))
 
-                while not env.flow.kill_state and not actions_future.done():
-                    time.sleep(0.1)
-                vprint(f"env.flow.kill_state: {env.flow.kill_state}, actions_future.done(): {actions_future.done()}")
-                if env.flow.kill_state:
-                    vprint(f"State changed, terminating state: {current_state.name}")
-                    sleep(9)
-                    env.flow.kill_state = False
-                    current_state = env.flow.current_state
-                else:
-                    vprint(f"State actions completed: {current_state.name}")
-                    transitions_future.result()  # Wait for transitions to complete
-                    current_state = env.flow.current_state
-    
+            done, pending = await asyncio.wait(
+                [actions_task, transitions_task],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            if actions_task in done:
+                vprint(f"State actions completed: {current_state.name}")
+            if transitions_task in done:
+                vprint(f"State changed, terminating state: {current_state.name}")
+                env.flow['kill_state'] = False
+                current_state = env.flow['current_state']
+
     def terminate(self):
         pass
 
@@ -87,32 +85,20 @@ class cFlow():
             raise Exception("Config file not found")
         config = configparser.ConfigParser()
         config.read(path_to_config)
-        if "Settings" not in config:
-            raise Exception("Settings section not found in config file")
-        if "memory_mode" not in config["Settings"]:
-            raise Exception("memory_mode not found in config file")
-        if "token_limit" not in config["Settings"]:
-            raise Exception("token_limit not found in config file")
-        if "verbose" not in config["Settings"]:
-            raise Exception("verbose not found in config file")
-        if "export_env" not in config["Settings"]:
-            raise Exception("export_env not found in config file")
+        required_settings = ["memory_mode", "token_limit", "verbose", "export_env"]
+        for setting in required_settings:
+            if setting not in config["Settings"]:
+                raise Exception(f"{setting} not found in config file")
 
     def show(self):
         nodes = [state.name for state in self.states] + ["Start"]
         edges = [(transition.source.name, transition.destination.name) for transition in self.transitions] + [("Start", self.start_state.name)]
-        # Create a directed graph
+        
         G = nx.DiGraph()
-
-        # Add nodes to the graph
         G.add_nodes_from(nodes)
-
-        # Add edges to the graph
         G.add_edges_from(edges)
 
-        # Draw the graph
-        pos = nx.spring_layout(G)  # positions for all nodes
+        pos = nx.spring_layout(G)
         nx.draw(G, pos, with_labels=True, node_color='skyblue', node_size=700, edge_color='k', linewidths=1, font_size=15, arrows=True)
 
-        # Show the graph
         plt.show()

@@ -21,7 +21,7 @@ def render_markdown(text):
     console.print(markdown)
 
 def vprint(*args):
-    if env.config.verbose:
+    if env.config["verbose"]:
         #if args is blank, print a newline
         if args == ():
             print()

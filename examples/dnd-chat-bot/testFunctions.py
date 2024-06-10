@@ -1,3 +1,7 @@
+import configparser
+import os
+import uuid
+import datetime
 from cyrus import *
 
 # Initialize the Environment singleton
@@ -6,10 +10,10 @@ env = Environment.getInstance()
 # Test for turn function
 def test_turn():
     env.clear()  # Reset environment
-    env.messages.current_thread.add_message(Message("a","b","c"))
-    env.messages.current_thread.add_message(Message("a","b","c"))
-    env.messages.current_thread.add_message(Message("a","b","c"))
-    env.messages.current_thread.add_message(Message("a","b","c"))
+    env.messages['current_thread'].add_message(Message("a", "b", "c"))
+    env.messages['current_thread'].add_message(Message("a", "b", "c"))
+    env.messages['current_thread'].add_message(Message("a", "b", "c"))
+    env.messages['current_thread'].add_message(Message("a", "b", "c"))
     turn_function = turn(4)
     assert turn_function.run() == True, "Turn function failed for matching step"
 
@@ -42,9 +46,6 @@ def test_not_():
     env.clear()  # Reset environment
     not_function = not_(True)
     assert not_function.run() == False, "not_ function failed for true condition"
-
-# Following the same pattern, you can write tests for equals, not_equals, and so forth
-# For brevity, only a sample of these tests are provided
 
 # Test for equals function
 def test_equals():
@@ -159,12 +160,6 @@ def test_index():
     index_function = index(test_dict, 'key1')
     assert index_function.run() == 'value1', "index function failed for 'key1' in test_dict"
 
-# Note: Remember to actually call these test functions if you want to run the tests.
-
-
-# Implement similar tests for greater_than, less_than, greater_than_or_equals, less_than_or_equals, add, subtract, multiply, divide, mod, in_, not_in_, and index
-# Due to the conceptual nature of this exercise, these implementations are left as an exercise for clarity and conciseness
-
 # Run the tests
 test_turn()
 test_and_()
@@ -185,13 +180,12 @@ test_in_()
 test_not_in_()
 test_index()
 
-
 # Output success message or handle assertion errors
 print("All non-agent tests passed successfully!")
 
 agent = Agent.create("dm")
 
-#test isCalled by asking the agent to "roll 3d6". In a seperate thread, watch the environment to see if the function is called.
+# Test isCalled by asking the agent to "roll 3d6". In a separate thread, watch the environment to see if the function is called.
 
 import threading
 import time
@@ -213,7 +207,7 @@ def monitor_function():
         time.sleep(0.1)
         called = True
     if called:
-        print("rollDice function was called, isCalled function returned True")
+        print("rollDice function was called, is_called function returned True")
     else:
         print("timeout reached, rollDice function was not called")
     while called_checker.run() and time.time() - start_time < 120:
@@ -223,8 +217,7 @@ def monitor_function():
         time.sleep(0.1)
         reset = True
     if reset:
-        print("isCalled function successfully reset on turn end")
-    
+        print("is_called function successfully reset on turn end")
 
 # Set up threading
 command_thread = threading.Thread(target=send_command)
@@ -237,4 +230,3 @@ monitor_thread.start()
 # Optionally join threads if needed
 command_thread.join()
 monitor_thread.join()
-

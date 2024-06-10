@@ -1,6 +1,7 @@
 from cyrus import Environment, vprint
+import asyncio
 
-class Transition():
+class Transition:
     def __init__(self, source, destination, condition):
         self.source = source
         self.destination = destination
@@ -10,12 +11,18 @@ class Transition():
 
     def __str__(self):
         return f"Transition from {self.source} to {self.destination} with condition {self.condition}"
-    def check(self):
+    
+    async def check(self):
         if callable(self.condition):
-            return self.condition()
+            result = self.condition()
+            if asyncio.iscoroutine(result):
+                return await result
+            else:
+                return result
         elif hasattr(self.condition, "run"):
-            return self.condition.run()
+            return await self.condition.run()
         else:
             return bool(self.condition)
+
     def run(self):
-        env.flow.current_state = self.destination
+        env.flow["current_state"] = self.destination

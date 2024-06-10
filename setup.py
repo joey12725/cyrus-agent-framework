@@ -10,7 +10,7 @@ setup(
     author_email='joeyandpaige@gmail.com',
     url='https://github.com/joey12725/cyrus-agent-framework',
     install_requires=[
-        'openai'
+        'openai',
         'networkx',
         'matplotlib',
     ],

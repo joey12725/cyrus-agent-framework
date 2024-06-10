@@ -1,65 +1,52 @@
-#a class for AI agents
 import json
 import os
-from openai import OpenAI
 import sys
 import time
 import importlib.util
 import inspect
-from cyrus import Environment, remove_all, Message, Thread
+import asyncio
+from openai import OpenAI
 from abc import ABC, abstractmethod
-from vertexai.generative_models import (
-    GenerationConfig,
-    GenerativeModel,
-    HarmBlockThreshold,
-    HarmCategory,
-    Part,
-)
-#set api key eviroment variable (REMOVE BEFORE NEXT COMMIT)
-os.environ["OPENAI_API_KEY"] = "REDACTED_OPENAI_KEY"
+from cyrus import Environment, Message, Thread
 
 class Agent(ABC):
     @abstractmethod
-    def generate_message(cls, prompt):
+    def generate_message(self, prompt):
         pass
 
     @abstractmethod
-    def terminate(cls, remove_files=False):
+    def terminate(self, remove_files=False):
         pass
 
     @abstractmethod
-    def load_thread(cls, thread):
+    async def load_thread(self, thread):
         pass
 
     @abstractmethod
-    def __init__(): 
+    def __init__(self, agent_config): 
         pass
 
     @classmethod
-    def create(cls, agent_config_file):
-        agent_config_file = os.path.join(os.getcwd(), "agents", agent_config_file  + ".agent")
+    async def create(cls, agent_config_file):
+        agent_config_file = os.path.join(os.getcwd(), "agents", agent_config_file + ".agent")
         cls.validate_agent_file(agent_config_file)
-        #load agent config file as json
-        with open(agent_config_file, 'r') as agent_config_file:
-            agent_config = json.load(agent_config_file)
+        # Load agent config file as JSON
+        with open(agent_config_file, 'r') as file:
+            agent_config = json.load(file)
         platform = agent_config['platform']
-        cls.platform = platform
         if platform == "openai-assistant":
-            ret = OAIAssistantAgent(agent_config)
-            ret.__init__(agent_config)
-            return ret
+            agent = OAIAssistantAgent(agent_config)
+            await agent.init()
+            return agent
         elif platform == "bedrock-agent":
-            ret = BedrockAgent(agent_config)
-            ret.__init__(agent_config)
-            return ret
+            return BedrockAgent(agent_config)
         elif platform == "gemini":
             print("Coming Soon ;)")
         else:
             raise Exception(f"Invalid platform: {platform}")
 
-    def get_response(self, prompt):
-        return self.generate_message(prompt)
-        
+    async def get_response(self, prompt):
+        return await self.generate_message(prompt)
 
     @classmethod
     def cot(cls, context=None, prompts=[]):
@@ -100,45 +87,43 @@ class Agent(ABC):
         for arg in args:
             if arg not in func_args:
                 raise TypeError(f"The function {function} does not accept a parameter named {arg}.")
-        env.function_status.set_value(function, "in progress")
+        
+        env = Environment.getInstance()
+        env.function_status[function] = "in progress"
         ret = func(**args)
-        env.function_status.set_value(function, "completed")
+        env.function_status[function] = "completed"
         return ret
 
     @classmethod
     def validate_function_file(cls, function_file):
-
-        #check if the extension is .function
+        # Check if the extension is .function
         if function_file.split(".")[1] != "function":
             raise Exception(f"Invalid file extension: {function_file.split('.')[1]}")
-            return False
-        #check if the file is a json
-        with open(function_file, 'r') as function_file:
+        # Check if the file is a JSON
+        with open(function_file, 'r') as file:
             try:
-                function_config = json.load(function_file)
+                function_config = json.load(file)
                 function_config = {"type": "function", "function": function_config}
             except json.JSONDecodeError:
                 raise Exception(f"Invalid formatting (JSON DECODE ERROR): {function_file}")
 
-        #check if the file has the required properties
+        # Check if the file has the required properties
         required_properties = ["type", "function"]
         for property in required_properties:
             if property not in function_config:
                 raise Exception(f"Missing property: {property}")      
- 
+
     @classmethod
     def validate_agent_file(cls, agent_config_file):
-        #check if the extension is .agent
+        # Check if the extension is .agent
         if agent_config_file.split(".")[1] != "agent":
             raise Exception(f"Invalid file extension: {agent_config_file.split('.')[1]}")
-            return False
-        #check if the file is a json
-        with open(agent_config_file, 'r') as agent_config_file:
+        # Check if the file is a JSON
+        with open(agent_config_file, 'r') as file:
             try:
-                agent_config = json.load(agent_config_file)
+                agent_config = json.load(file)
             except json.JSONDecodeError:
                 raise Exception(f"Invalid JSON file: {agent_config_file}")
-                return False
 
         if "platform" not in agent_config:
             raise Exception("Missing property: platform")
@@ -148,22 +133,21 @@ class Agent(ABC):
         
         if agent_config['platform'] == "openai-assistant":
             required_properties = ["name", "role", "system_prompt", "model", "tools", "functions", "files"]
-            for property in required_properties :
+            for property in required_properties:
                 if property in ["name", "role", "system_prompt", "model"] and property not in agent_config:
                     raise Exception(f"Missing property: {property}")
                 if property in ["tools", "functions", "files"] and property not in agent_config:
                     agent_config[property] = []
         
-            #check if the tools are valid
+            # Check if the tools are valid
             for tool in agent_config['tools']:
                 if tool not in ["code interpreter", "retrieval"]:
                     raise Exception(f"Invalid tool: {tool}")
-                
-    def __str__(cls):
-        return f"Agent: {cls.name}, Platform: {cls.platform}, Role: {cls.role}, Model: {cls.model}, Tools: {cls.tools}, Functions: {cls.functions}, Files: {cls.files}"
+
+    def __str__(self):
+        return f"Agent: {self.name}, Platform: {self.platform}, Role: {self.role}, Model: {self.model}, Tools: {self.tools}, Functions: {self.functions}, Files: {self.files}"
 
 class OAIAssistantAgent(Agent):
-
     def __init__(self, agent_config):
         global env
         env = Environment.getInstance()
@@ -183,7 +167,7 @@ class OAIAssistantAgent(Agent):
         self.functions = {}
 
         for f in agent_config['functions']:
-            env.function_status.set_value(f, False) 
+            env.function_status[f] = False 
         if "functions" in agent_config:
             for function in agent_config['functions']:
                 file_path = os.path.join(os.getcwd(), "functions", function + ".function")
@@ -215,7 +199,7 @@ class OAIAssistantAgent(Agent):
         if "files" in agent_config:    
             for file in agent_config['files']:
                 existing_files = self.client.files.list()
-                if file not in [x.filename for x in existing_files]: #if the file doesn't exist
+                if file not in [x.filename for x in existing_files]:  # If the file doesn't exist
                     upload = self.client.files.create(
                         file=open(os.path.join(os.getcwd(), "docs", file), "rb"),
                         purpose='assistants'
@@ -226,20 +210,19 @@ class OAIAssistantAgent(Agent):
                     self.files[file] = [x.id for x in existing_files if x.filename == file][0]
                     print(f"{file} already exists in OpenAI")
 
+    async def init(self):
         filtered_functions = {k: v for k, v in self.functions.items() if k != "args"}
 
         self.assistant = self.client.beta.assistants.create(
             instructions=self.system_prompt,
             model=self.model,
-            tools = self.tools + list(filtered_functions.values()),
-            file_ids=list(self.files.values())
+            tools=self.tools + list(filtered_functions.values()),
+            # file_ids=list(self.files.values())
         )
 
         self.thread = self.client.beta.threads.create()
-    
-    
-    def generate_message(self, prompt):
 
+    async def generate_message(self, prompt):
         self.client.beta.threads.messages.create(
             thread_id=self.thread.id,
             role="user",
@@ -253,7 +236,6 @@ class OAIAssistantAgent(Agent):
         )
 
         while run.status != "completed":
-
             if run.status == "requires_action":
                 args = [json.loads(run.required_action.submit_tool_outputs.tool_calls[x].function.arguments) for x in range(len(run.required_action.submit_tool_outputs.tool_calls))]
                 functions = [run.required_action.submit_tool_outputs.tool_calls[x].function.name for x in range(len(run.required_action.submit_tool_outputs.tool_calls))]
@@ -261,8 +243,11 @@ class OAIAssistantAgent(Agent):
                 run = self.client.beta.threads.runs.submit_tool_outputs(
                     thread_id=self.thread.id,
                     run_id=run.id,
-                    tool_outputs= [ { "tool_call_id": tool_call_id[x],
-                                      "output": self.call_function(functions[x], args[x]) } for x in range(len(run.required_action.submit_tool_outputs.tool_calls))] )
+                    tool_outputs=[{
+                        "tool_call_id": tool_call_id[x],
+                        "output": self.call_function(functions[x], args[x])
+                    } for x in range(len(run.required_action.submit_tool_outputs.tool_calls))]
+                )
 
             if run.status == "expired":
                 raise Exception("Run expired")
@@ -280,9 +265,9 @@ class OAIAssistantAgent(Agent):
             run = self.client.beta.threads.runs.retrieve(
                 thread_id=self.thread.id,
                 run_id=run.id
-                )
+            )
     
-            time.sleep(.5)
+            await asyncio.sleep(0.5)
         
         messages = self.client.beta.threads.messages.list(
             thread_id=self.thread.id
@@ -291,24 +276,23 @@ class OAIAssistantAgent(Agent):
             if thread_message.role == 'assistant':
                 for content in thread_message.content:
                     try:
-                        return(content.text.value)
+                        return content.text.value
                     except:
                         pass
-    
 
-    def terminate(self, remove_files=False):
+    async def terminate(self, remove_files=False):
         self.client.beta.threads.delete(self.thread.id)
         self.client.beta.assistants.delete(self.assistant.id)
         if remove_files:
             for file in self.files.values():
                 self.client.beta.assistants.files.delete(
                     assistant_id=self.assistant.id,
-                    file_id=self.files[file]
+                    file_id=file
                 )
 
         return f"Agent: {self.name}, Role: {self.role}, Model: {self.model}, Tools: {self.tools}, Functions: {self.functions}, Files: {self.files}"
 
-    def load_thread(self, local_thread, user_agent = "user", assistant_agent = "assistant", role_map = None):
+    async def load_thread(self, local_thread, user_agent="user", assistant_agent="assistant", role_map=None):
         openai_thread = self.client.beta.threads.create()
         if len(local_thread.messages) > 0:
             for message in local_thread.messages:
@@ -327,105 +311,12 @@ class OAIAssistantAgent(Agent):
         for local_message in local_thread.messages:
             sender = local_message.sender
             role = role_map[sender]
-            openai_message = OpenAI.Message.create(
+            OpenAI.Message.create(
                 thread_id=openai_thread.id,
-                role=role,  # Implement this function based on your logic
+                role=role,
                 content=local_message.content,
                 # Include file_ids if you have attachments
             )
 
-        self.thread = openai_thread  # Use self.thread instead of cls.thread
+        self.thread = openai_thread
         return
-    
-
-
-import os
-import uuid
-from vertexai.generative_models import (
-    GenerationConfig,
-    GenerativeModel,
-    HarmBlockThreshold,
-    HarmCategory,
-    Part,
-)
-
-class GeminiAgent(Agent):
-    def __init__(self, agent_config):
-        global env
-        env = Environment.getInstance()
-        self.name = agent_config['name']
-        self.role = agent_config['role']
-        self.system_instruction = agent_config['system_instruction']
-        self.model_id = agent_config['model_id']
-        self.files = {}
-        self.agent_filename = agent_config['role'] + ".agent"
-        self.generation_config = GenerationConfig(
-            temperature=agent_config.get('temperature', 0.9),
-            top_p=agent_config.get('top_p', 1.0),
-            top_k=agent_config.get('top_k', 32),
-            candidate_count=agent_config.get('candidate_count', 1),
-            max_output_tokens=agent_config.get('max_output_tokens', 8192),
-        )
-        self.safety_settings = {
-            HarmCategory.HARM_CATEGORY_HARASSMENT: agent_config.get('harassment_threshold', HarmBlockThreshold.BLOCK_LOW_AND_ABOVE),
-            HarmCategory.HARM_CATEGORY_HATE_SPEECH: agent_config.get('hate_speech_threshold', HarmBlockThreshold.BLOCK_LOW_AND_ABOVE),
-            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: agent_config.get('sexually_explicit_threshold', HarmBlockThreshold.BLOCK_LOW_AND_ABOVE),
-            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: agent_config.get('dangerous_content_threshold', HarmBlockThreshold.BLOCK_LOW_AND_ABOVE),
-        }
-        self.model = GenerativeModel(
-            self.model_id,
-            system_instruction=self.system_instruction,
-        )
-        if "files" in agent_config:
-            for filename in agent_config['files']:
-                file_bytes = env.files.get_value(filename)
-                if file_bytes:
-                    self.files[filename] = file_bytes
-                    print(f"Loaded {filename} from environment")
-                else:
-                    print(f"File {filename} not found in environment")
-        self.thread = Thread()
-
-    def generate_message(self, prompt):
-        contents = []
-        for filename, file_bytes in self.files.items():
-            file_ext = os.path.splitext(filename)[1][1:].lower()
-            if file_ext in ['mp3', 'wav', 'ogg']:
-                mime_type = f'audio/{file_ext}'
-            elif file_ext in ['mp4', 'avi', 'mov']:
-                mime_type = f'video/{file_ext}'
-            elif file_ext == 'pdf':
-                mime_type = 'application/pdf'
-            elif file_ext in ['png', 'jpg', 'jpeg', 'gif']:
-                mime_type = f'image/{file_ext}'
-            else:
-                print(f"Warning: Unsupported file type {file_ext} for file {filename}. Ignoring.")
-                continue
-
-            file_part = Part.from_bytes(file_bytes, mime_type=mime_type)
-            contents.append(file_part)
-
-        messages = self.thread.dump(token_saver=True, charecter_limit=self.generation_config.max_output_tokens)
-        contents.append(messages)
-        contents.append(prompt)
-
-        response = self.model.generate_content(
-            contents,
-            generation_config=self.generation_config,
-            safety_settings=self.safety_settings,
-        )
-
-        self.thread.add_message(Message(self.name, 'user', prompt))
-        self.thread.add_message(Message('user', self.name, response.text))
-
-        return response.text
-
-    def terminate(self, remove_files=False):
-        if remove_files:
-            self.files = {}
-
-    def load_thread(self, thread):
-        self.thread = thread
-
-    def add_file(self, filename, file_bytes):
-        self.files[filename] = file_bytes

@@ -1,9 +1,6 @@
 from cyrus import Agent, Environment, vprint
 import os
 import configparser
-import concurrent.futures
-import threading
-import time
 import matplotlib.pyplot as plt
 import networkx as nx
 import asyncio
@@ -45,15 +42,17 @@ class cFlow:
         await state.run()
 
     async def check_transitions(self, state):
-        vprint(f"Checking transitions for state: {state.name}")
         while not env.flow['kill_state']:
             for transition in state.transitions:
                 if await transition.check():
                     vprint(f"Transitioning from {transition.source.name} to {transition.destination.name} since condition is met")
                     env.flow['kill_state'] = True
                     env.flow['current_state'] = transition.destination
-                    return
+                    return True
+                else:
+                    vprint(f"Transition condition not met for {transition.source.name} to {transition.destination.name}")
             await asyncio.sleep(0.1)
+        return False
 
     async def run(self):
         env.flow['kill_state'] = False
@@ -61,6 +60,7 @@ class cFlow:
 
         while True:
             vprint(f"Starting state: {current_state.name}")
+            env.flow['kill_state'] = False
             actions_task = asyncio.create_task(self.run_state_actions(current_state))
             transitions_task = asyncio.create_task(self.check_transitions(current_state))
 
@@ -69,36 +69,39 @@ class cFlow:
                 return_when=asyncio.FIRST_COMPLETED,
             )
 
-            if actions_task in done:
-                vprint(f"State actions completed: {current_state.name}")
             if transitions_task in done:
-                vprint(f"State changed, terminating state: {current_state.name}")
-                env.flow['kill_state'] = False
-                current_state = env.flow['current_state']
+                if transitions_task.result():
+                    vprint(f"State changed, terminating state: {current_state.name}")
+                    env.flow['kill_state'] = True
+                    current_state = env.flow['current_state']
+                    for task in pending:
+                        task.cancel()
+                    continue
+            elif env.flow['kill_state']:
+                    vprint(f"State actions terminated, transitioning using alternate method")
+                    current_state = env.flow['current_state']
+                    continue
 
-    def terminate(self):
-        pass
+            if actions_task in done:
+                if current_state == env.flow['current_state']:
+                    vprint(f"State actions completed for {current_state.name}")
+                    for task in pending:
+                        task.cancel()
+                    break
+                else:
+                    vprint(f"State changed, terminating state: {current_state.name}")
+                    env.flow['kill_state'] = True
+                    current_state = env.flow['current_state']
+                    for task in pending:
+                        task.cancel()
+                    continue
 
-    def validate_config_file(self):
-        path_to_config = os.path.join(os.getcwd(), "config.ini")
-        if not os.path.exists(path_to_config):
-            raise Exception("Config file not found")
-        config = configparser.ConfigParser()
-        config.read(path_to_config)
-        required_settings = ["memory_mode", "token_limit", "verbose", "export_env"]
-        for setting in required_settings:
-            if setting not in config["Settings"]:
-                raise Exception(f"{setting} not found in config file")
+            # Check transitions after state actions complete
+            if not transitions_task.result():
+                vprint("Checking transitions after state actions completed")
+                if await self.check_transitions(current_state):
+                    vprint(f"Transitioning after state actions completed from {current_state.name} to {env.flow['current_state'].name}")
+                    current_state = env.flow['current_state']
+                    continue
 
-    def show(self):
-        nodes = [state.name for state in self.states] + ["Start"]
-        edges = [(transition.source.name, transition.destination.name) for transition in self.transitions] + [("Start", self.start_state.name)]
-        
-        G = nx.DiGraph()
-        G.add_nodes_from(nodes)
-        G.add_edges_from(edges)
-
-        pos = nx.spring_layout(G)
-        nx.draw(G, pos, with_labels=True, node_color='skyblue', node_size=700, edge_color='k', linewidths=1, font_size=15, arrows=True)
-
-        plt.show()
+            break

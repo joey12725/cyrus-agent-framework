@@ -1,13 +1,14 @@
 from cyrus import *
 import random
+import asyncio
+async def main():
+    env = Environment.getInstance()
+    agent = await Agent.create("dm")
 
-env = Environment.getInstance()
-agent = Agent.create("dm")
-
-# action = talks_to("user", agent, context="Three goblins, armed with scimitars and shortbows, lurk in the camp; they have 7 HP each, AC 15, and can deal 1d6+2 slashing or piercing damage per attack.")    
-action = talks_to(agent, "self", context="Trade dnd theamed roasts/joking insults with the user. This is not a game of dnd, just some relaxing humor. This is not in charecter. Responses should be short and quippy.")
-#action = println("Hello World")
-action.run()
+    #action = talks_to("user", agent, context="Three goblins, armed with scimitars and shortbows, lurk in the camp; they have 7 HP each, AC 15, and can deal 1d6+2 slashing or piercing damage per attack.")    
+    action = talks_to(agent, "self", context="Trade dnd theamed roasts/joking insults with the user. This is not a game of dnd, just some relaxing humor. This is not in charecter. Responses should be short and quippy.")
+    #action = println("Hello World")
+    await action.run()
 
 """
 agent.get_response("write a christmas strory about 3 goblins gifting the spoils of their raids")
@@ -43,3 +44,5 @@ print("cleared enviroment")
 
 env.variables.show()
 """
+
+asyncio.run(main())

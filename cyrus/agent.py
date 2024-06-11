@@ -5,13 +5,14 @@ import time
 import importlib.util
 import inspect
 import asyncio
+import base64
 from openai import OpenAI
 from abc import ABC, abstractmethod
-from cyrus import Environment, Message, Thread
+from cyrus import Environment, Message, Thread, vprint
 
 class Agent(ABC):
     @abstractmethod
-    def generate_message(self, prompt):
+    def generate_message(self, prompt, images=[]):
         pass
 
     @abstractmethod
@@ -35,7 +36,7 @@ class Agent(ABC):
             agent_config = json.load(file)
         platform = agent_config['platform']
         if platform == "openai-assistant":
-            agent = OAIAssistantAgent(agent_config)
+            agent = OAIAgent(agent_config)
             await agent.init()
             return agent
         elif platform == "bedrock-agent":
@@ -45,8 +46,8 @@ class Agent(ABC):
         else:
             raise Exception(f"Invalid platform: {platform}")
 
-    async def get_response(self, prompt):
-        return await self.generate_message(prompt)
+    async def get_response(self, prompt, images=[]):
+        return await self.generate_message(prompt, images)
 
     @classmethod
     def cot(cls, context=None, prompts=[]):
@@ -83,6 +84,7 @@ class Agent(ABC):
 
         func = getattr(module, function)
 
+        vprint(f"Function {function} called with arguments: {args}")
         func_args = inspect.getfullargspec(func).args
         for arg in args:
             if arg not in func_args:
@@ -90,8 +92,11 @@ class Agent(ABC):
         
         env = Environment.getInstance()
         env.function_status[function] = "in progress"
+        vprint("flag set to in progress")
         ret = func(**args)
         env.function_status[function] = "completed"
+        vprint(f"Function {function} returned: {ret}")
+        vprint("flag set to completed")
         return ret
 
     @classmethod
@@ -147,7 +152,7 @@ class Agent(ABC):
     def __str__(self):
         return f"Agent: {self.name}, Platform: {self.platform}, Role: {self.role}, Model: {self.model}, Tools: {self.tools}, Functions: {self.functions}, Files: {self.files}"
 
-class OAIAssistantAgent(Agent):
+class OAIAgent(Agent):
     def __init__(self, agent_config):
         global env
         env = Environment.getInstance()
@@ -155,168 +160,96 @@ class OAIAssistantAgent(Agent):
         self.role = agent_config['role']
         self.system_prompt = agent_config['system_prompt']
         self.model = agent_config['model']
-        self.files = {}
-        self.tools = []
-        self.agent_filename = agent_config['role'] + ".agent"
-        if "tools" in agent_config:
-            for tool in agent_config['tools']:
-                self.tools.append({"type": tool})
-
+        self.function_names = agent_config.get('functions', [])
         self.client = OpenAI()
-
-        self.functions = {}
-
-        for f in agent_config['functions']:
-            env.function_status[f] = False 
-        if "functions" in agent_config:
-            for function in agent_config['functions']:
-                file_path = os.path.join(os.getcwd(), "functions", function + ".function")
-                with open(file_path, 'r') as file:
-                    self.validate_function_file(file_path)
-                    function_data = json.load(file)
-                    function_data = {"type": "function", "function": function_data}
-                    elements = {
-                        "type": None,
-                        "function": {
-                            "name": None,
-                            "parameters": ["type", "properties", "required"],
-                            "description": None
-                        }
-                    }
-                    for key in elements["function"]["parameters"].copy():
-                        if key not in function_data["function"]["parameters"]:
-                            del elements["function"]["parameters"][key]
-                    for key in function_data["function"].copy():
-                        if key not in elements["function"]:
-                            del function_data["function"][key]
-                    for key in function_data.copy():
-                        if key not in elements:
-                            del function_data[key]
-                    parameters_keys = list(function_data['function']['parameters']['properties'].keys())
-                    self.functions[function] = function_data
-                    self.functions["args"] = {}
-                    self.functions["args"][function] = parameters_keys
-        if "files" in agent_config:    
-            for file in agent_config['files']:
-                existing_files = self.client.files.list()
-                if file not in [x.filename for x in existing_files]:  # If the file doesn't exist
-                    upload = self.client.files.create(
-                        file=open(os.path.join(os.getcwd(), "docs", file), "rb"),
-                        purpose='assistants'
-                    ) 
-                    self.files[file] = upload.id
-                    print(f"Uploaded {file} to OpenAI")
-                else:
-                    self.files[file] = [x.id for x in existing_files if x.filename == file][0]
-                    print(f"{file} already exists in OpenAI")
+        self.thread = [{"role": "system", "content": self.system_prompt}]
+        self.function_definitions = self.load_function_definitions(self.function_names)
+        self.function_definitions = [{"type": "function", "function": x}  for x in self.function_definitions]
 
     async def init(self):
-        filtered_functions = {k: v for k, v in self.functions.items() if k != "args"}
+        # Placeholder for any initialization logic if needed
+        pass
 
-        self.assistant = self.client.beta.assistants.create(
-            instructions=self.system_prompt,
+    def load_function_definitions(self, function_names):
+        function_definitions = []
+        for function_name in function_names:
+            function_file = os.path.join(os.getcwd(), "functions", function_name + ".function")
+            self.validate_function_file(function_file)
+            with open(function_file, 'r') as file:
+                function_definition = json.load(file)
+                function_definitions.append(function_definition)
+        return function_definitions
+
+    async def generate_message(self, prompt, images=[]):
+        content = [{"role": "user", "content": prompt}]
+        if images:
+            for image_data in images:
+                image_base64 = base64.b64encode(image_data).decode('utf-8')
+                content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}})
+        
+        self.thread.append({"role": "user", "content": prompt})
+
+        response = self.client.chat.completions.create(
             model=self.model,
-            tools=self.tools + list(filtered_functions.values()),
-            # file_ids=list(self.files.values())
+            messages=self.thread,
+            tools=self.function_definitions,
+            tool_choice="auto"
         )
 
-        self.thread = self.client.beta.threads.create()
-
-    async def generate_message(self, prompt):
-        self.client.beta.threads.messages.create(
-            thread_id=self.thread.id,
-            role="user",
-            content=prompt
-        )
-
-        run = self.client.beta.threads.runs.create(
-            thread_id=self.thread.id,
-            assistant_id=self.assistant.id,
-            instructions=self.system_prompt
-        )
-
-        while run.status != "completed":
-            if run.status == "requires_action":
-                args = [json.loads(run.required_action.submit_tool_outputs.tool_calls[x].function.arguments) for x in range(len(run.required_action.submit_tool_outputs.tool_calls))]
-                functions = [run.required_action.submit_tool_outputs.tool_calls[x].function.name for x in range(len(run.required_action.submit_tool_outputs.tool_calls))]
-                tool_call_id = [run.required_action.submit_tool_outputs.tool_calls[x].id for x in range(len(run.required_action.submit_tool_outputs.tool_calls))]
-                run = self.client.beta.threads.runs.submit_tool_outputs(
-                    thread_id=self.thread.id,
-                    run_id=run.id,
-                    tool_outputs=[{
-                        "tool_call_id": tool_call_id[x],
-                        "output": self.call_function(functions[x], args[x])
-                    } for x in range(len(run.required_action.submit_tool_outputs.tool_calls))]
-                )
-
-            if run.status == "expired":
-                raise Exception("Run expired")
-        
-            if run.status == "cancelling":
-                print("Run cancelling")
-            
-            if run.status == "cancelled":
-                print("Run cancelled")
-                sys.exit()
-                
-            if run.status == "failed":
-                raise Exception("Run failed")
-            
-            run = self.client.beta.threads.runs.retrieve(
-                thread_id=self.thread.id,
-                run_id=run.id
+        if response.choices[0].message.content:
+            result = response.choices[0].message.content
+        else:
+            result = f""
+        self.thread.append(response.choices[0].message)
+        # Handle function calling
+        if response.choices[0].finish_reason == "tool_calls":
+            function_call = response.choices[0].message.tool_calls[0]
+            function_name = function_call.function.name
+            function_args = json.loads(function_call.function.arguments)
+            function_result = self.call_function(function_name, function_args)
+            tool_call_id = function_call.id
+            # Append function result to the thread and call the model again
+            self.thread.append(
+                {
+                    "tool_call_id": tool_call_id,
+                    "role": "tool",
+                    "name": function_name,
+                    "content": function_result,
+                }
             )
-    
-            await asyncio.sleep(0.5)
-        
-        messages = self.client.beta.threads.messages.list(
-            thread_id=self.thread.id
-        )
-        for thread_message in messages.data:
-            if thread_message.role == 'assistant':
-                for content in thread_message.content:
-                    try:
-                        return content.text.value
-                    except:
-                        pass
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=self.thread
+            )
+            if response.choices[0].message.content:
+                result += "\n" + response.choices[0].message.content
+        self.thread.append({"role": "assistant", "content": result})
+        return result
 
     async def terminate(self, remove_files=False):
-        self.client.beta.threads.delete(self.thread.id)
-        self.client.beta.assistants.delete(self.assistant.id)
-        if remove_files:
-            for file in self.files.values():
-                self.client.beta.assistants.files.delete(
-                    assistant_id=self.assistant.id,
-                    file_id=file
-                )
-
+        # Placeholder for any termination logic if needed
         return f"Agent: {self.name}, Role: {self.role}, Model: {self.model}, Tools: {self.tools}, Functions: {self.functions}, Files: {self.files}"
 
     async def load_thread(self, local_thread, user_agent="user", assistant_agent="assistant", role_map=None):
-        openai_thread = self.client.beta.threads.create()
+        openai_thread = [{"role": "system", "content": self.system_prompt}]
         if len(local_thread.messages) > 0:
             for message in local_thread.messages:
                 if (message.sender != user_agent and message.recipient != assistant_agent) or (message.sender != assistant_agent and message.recipient != user_agent) and role_map is None:
-                    raise Exception(f"Provided agent aliases do not match the sender and recipient of the messages in the local thread. The sender and recipient of the first message in the local thread are {message.sender} and {message.recipient} respectively, while the provided aliases are {user_agent} and {assistant_agent}.")
+                    raise Exception(f"Provided agent aliases do not match the sender and recipient of the messages in the local thread. The sender and recipient of the first message in the local thread are {message.sender} and {message.recipient} respectively, while the provided aliases are {role_map.keys()}.")
                 if role_map is not None:
                     for key, value in role_map.items():
                         if key not in [message.sender, message.recipient]:
                             raise Exception(f"Provided agent aliases do not match the sender and recipient of the messages in the local thread. The sender and recipient of the first message in the local thread are {message.sender} and {message.recipient} respectively, while the provided aliases are {role_map.keys()}.")
                         if value not in ["user", "assistant"]:
                             raise Exception(f"Invalid role: {value}, agent must be mapped must be either 'user' or 'assistant'")
-        role_map = {user_agent: 'user', assistant_agent: 'assistant'}
+                role_map = {user_agent: 'user', assistant_agent: 'assistant'}
         if not role_map:
             role_map = {user_agent: 'user', assistant_agent: 'assistant'}
         # Iterate over local messages and create them in the OpenAI thread
         for local_message in local_thread.messages:
             sender = local_message.sender
             role = role_map[sender]
-            OpenAI.Message.create(
-                thread_id=openai_thread.id,
-                role=role,
-                content=local_message.content,
-                # Include file_ids if you have attachments
-            )
+            openai_thread.append({"role": role, "content": local_message.content})
 
         self.thread = openai_thread
         return

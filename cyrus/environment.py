@@ -3,8 +3,33 @@ import os
 import uuid
 import datetime
 
+import uuid
+import datetime
+import os
+
+class File:
+    def __init__(self, extension, content=None, directory=None):
+        self.extension = extension.replace(".", "")
+        if directory is not None:
+            self.load_from_directory(directory)
+        elif content is not None:
+            self.content = content
+        else:
+            raise ValueError("Either content or directory must be provided")
+
+    def load_from_directory(self, directory):
+        try:
+            with open(directory, 'rb') as file:
+                self.content = file.read()
+        except Exception as e:
+            raise IOError(f"Error loading file from directory: {e}")
+
 class Message:
-    def __init__(self, sender, recipient, message, files=[]):
+    def __init__(self, sender, recipient, message, files=None):
+        if files is None:
+            files = []
+        if type(files) != list:
+            raise ValueError("Files must be a list of File objects")
         self.sender = sender
         self.recipient = recipient
         self.content = message
@@ -63,6 +88,7 @@ class Thread:
     def get_all_files(self):
         return [file for message in self.messages for file in message.files]
 
+
 class Environment:
 
     _instance = None
@@ -118,6 +144,7 @@ class Environment:
         for function in self.function_status:
             if self.function_status.get(function) != "in progress":
                 self.function_status[function] = False
+                print(f"Flag for {function} set to False")
         
         if new_conversation:
             new_thread = Thread()

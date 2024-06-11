@@ -42,8 +42,7 @@ class turn(Function):
         self.turn = turn
         self.env = Environment.getInstance()
     def run(self):
-        if random.random() < 0.1:
-            vprint("thread:", str(self.env.messages["current_thread"]))
+        vprint(f"Current turn: {self.env.messages['current_thread'].turn()}, Expected turn: {self.turn}")
         return self.turn == self.env.messages["current_thread"].turn()
 
 class and_(Function):

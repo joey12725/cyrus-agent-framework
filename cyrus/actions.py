@@ -8,7 +8,7 @@ from rich.markdown import Markdown
 import importlib.util
 import json
 import asyncio
-
+from time import sleep
 class Action:
     def __init__(self):
         global env 
@@ -107,17 +107,32 @@ class talks_to(Action):
         else:
             member1 = agent.name
             member2 = "user"
+        
+        if await self.check_transitions():
+            env.increment_step(sender=member1, recipient=member2, message=user_input, new_conversation=self.new_conversation)
+            vprint("Returning from check_transitions after user input")
+            sleep(0.1)
+            return
+        
         env.increment_step(sender=member1, recipient=member2, message=user_input, new_conversation=self.new_conversation)
         self.new_conversation = False
         user_input = str(user_input)
         response = await agent.get_response(user_input)
         render_markdown(f"**{agent.name}:**\n" + response)
+        if await self.check_transitions():
+            env.increment_step(sender=member2, recipient=member1, message=user_input, new_conversation=self.new_conversation)
+            vprint("Returning from check_transitions after agent response")
+            return
+        
         env.increment_step(sender=member2, recipient=member1, message=user_input, new_conversation=self.new_conversation)
+
+        # Periodic transition check
+
         if not self.until:
             return await self.step_conversation_user(agent)
         else:
             return
-    
+
     async def step_conversation_agent(self, agent1, agent2, context=""):
         if env.flow['kill_state']:
             return
@@ -140,14 +155,36 @@ class talks_to(Action):
         env.increment_step(sender=agent2.name, recipient=agent1.name, message=response, new_conversation=self.new_conversation, state=self.state)
         self.new_conversation = False
         vprint(f"**{agent1.name}:**\n" + response)
+        if await self.check_transitions():
+            return
         response = await agent2.get_response(response)
         env.increment_step(sender=agent1.name, recipient=agent2.name, message=response, state=self.state)
         vprint(f"**{agent2.name}:**\n" + response)
+
+        # Periodic transition check
+        if await self.check_transitions():
+            return
 
         if not self.until and not env.flow['kill_state']:
             return await self.step_conversation_agent(agent1, agent2)
         else:
             return
+        
+    async def check_transitions(self):
+        if env.flow['current_state']:
+            flow = cFlow.getInstance()
+            current_state = env.flow['current_state']
+            for transition in current_state.transitions:
+                if await transition.check():
+                    vprint(f"Transitioning from {transition.source.name} to {transition.destination.name} since condition is met")
+                    env.flow['kill_state'] = True
+                    env.flow['current_state'] = transition.destination
+                    return True
+                else:
+                    vprint(f"Transition condition not met for {transition.source.name} to {transition.destination.name}")
+            return False
+        else:
+            return False
         
     def __str__(self):
         if self.conversation_type == "user":
@@ -156,6 +193,7 @@ class talks_to(Action):
             return f"{self.agent1.name} talks to {self.agent2.name}"
         if self.conversation_type == "self":
             return f"{self.agent1.name} talks to itself"
+
 
 class reflect(Action):
     def __init__(self, agent, context=""):

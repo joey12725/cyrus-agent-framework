@@ -3,10 +3,10 @@ import random
 import asyncio
 async def main():
     env = Environment.getInstance()
-    agent = await Agent.create("dm")
+    agent = await Agent.create("dm-llama")
 
-    #action = talks_to("user", agent, context="Three goblins, armed with scimitars and shortbows, lurk in the camp; they have 7 HP each, AC 15, and can deal 1d6+2 slashing or piercing damage per attack.")    
-    action = talks_to(agent, "self", context="Trade dnd theamed roasts/joking insults with the user. This is not a game of dnd, just some relaxing humor. This is not in charecter. Responses should be short and quippy.")
+    action = talks_to("user", agent, context="Help the player come up with a characeter.")    
+    #action = talks_to(agent, "self", context="Trade dnd theamed roasts/joking insults with the user. This is not a game of dnd, just some relaxing humor. This is not in charecter. Responses should be short and quippy.")
     #action = println("Hello World")
     await action.run()
 

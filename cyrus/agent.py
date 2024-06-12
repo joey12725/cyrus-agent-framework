@@ -6,9 +6,13 @@ import importlib.util
 import inspect
 import asyncio
 import base64
+import configparser
 from openai import OpenAI
 from abc import ABC, abstractmethod
 from cyrus import Environment, Message, Thread, vprint
+import boto3
+import json
+import logging
 
 class Agent(ABC):
     @abstractmethod
@@ -43,9 +47,11 @@ class Agent(ABC):
             return BedrockAgent(agent_config)
         elif platform == "gemini":
             print("Coming Soon ;)")
+        elif platform == "perplexity":
+            agent = PerplexityAgent(agent_config)
+            return agent
         else:
             raise Exception(f"Invalid platform: {platform}")
-
     async def get_response(self, prompt, images=[]):
         return await self.generate_message(prompt, images)
 
@@ -92,11 +98,8 @@ class Agent(ABC):
         
         env = Environment.getInstance()
         env.function_status[function] = "in progress"
-        vprint("flag set to in progress")
         ret = func(**args)
         env.function_status[function] = "completed"
-        vprint(f"Function {function} returned: {ret}")
-        vprint("flag set to completed")
         return ret
 
     @classmethod
@@ -133,7 +136,7 @@ class Agent(ABC):
         if "platform" not in agent_config:
             raise Exception("Missing property: platform")
         
-        if agent_config['platform'] not in ["openai-assistant", "bedrock-agent", "gemini"]:
+        if agent_config['platform'] not in ["openai-assistant", "bedrock-agent", "gemini", "perplexity"]:
             raise Exception(f"Invalid platform: {agent_config['platform']}")
         
         if agent_config['platform'] == "openai-assistant":
@@ -154,6 +157,7 @@ class Agent(ABC):
 
 class OAIAgent(Agent):
     def __init__(self, agent_config):
+        self.platform = "openai"
         global env
         env = Environment.getInstance()
         self.name = agent_config['name']
@@ -161,14 +165,13 @@ class OAIAgent(Agent):
         self.system_prompt = agent_config['system_prompt']
         self.model = agent_config['model']
         self.function_names = agent_config.get('functions', [])
-        self.client = OpenAI()
         self.thread = [{"role": "system", "content": self.system_prompt}]
         self.function_definitions = self.load_function_definitions(self.function_names)
         self.function_definitions = [{"type": "function", "function": x}  for x in self.function_definitions]
-
-    async def init(self):
-        # Placeholder for any initialization logic if needed
-        pass
+        self.config = configparser.ConfigParser()
+        self.config.read(os.path.join(os.getcwd(), "config.ini"))
+        self.api_key = self.config["API_Keys"]["openai"]
+        self.client = OpenAI(api_key=self.api_key)
 
     def load_function_definitions(self, function_names):
         function_definitions = []
@@ -252,4 +255,224 @@ class OAIAgent(Agent):
             openai_thread.append({"role": role, "content": local_message.content})
 
         self.thread = openai_thread
+        return
+
+class PerplexityAgent(OAIAgent):
+    def __init__(self, agent_config):
+        self.platform = "perplexity"
+        global env
+        env = Environment.getInstance()
+        self.name = agent_config['name']
+        self.role = agent_config['role']
+        self.system_prompt = agent_config['system_prompt']
+        self.model = agent_config['model']
+        self.function_names = agent_config.get('functions', [])
+        self.thread = [{"role": "system", "content": self.system_prompt}]
+        self.function_definitions = self.load_function_definitions(self.function_names)
+        self.function_definitions = [{"type": "function", "function": x}  for x in self.function_definitions]
+        self.config = configparser.ConfigParser()
+        self.config.read(os.path.join(os.getcwd(), "config.ini"))
+        self.api_key = str(self.config["API_Keys"]["perplexity"])
+        self.client =  OpenAI(api_key=self.api_key, base_url="https://api.perplexity.ai")
+
+class BedrockAgent(Agent):
+    MODEL_CAPABILITIES = {
+        "amazon.titan-text-express-v1": {"system_prompt": False, "tool_use": False},
+        "amazon.titan-text-lite-v1": {"system_prompt": False, "tool_use": False},
+        "amazon.titan-text-premier-v1:0": {"system_prompt": False, "tool_use": False},
+        "anthropic.claude-v2": {"system_prompt": True, "tool_use": False},
+        "anthropic.claude-v2:1": {"system_prompt": True, "tool_use": False},
+        "anthropic.claude-3-sonnet-20240229-v1:0": {"system_prompt": True, "tool_use": True},
+        "anthropic.claude-3-haiku-20240307-v1:0": {"system_prompt": True, "tool_use": True},
+        "anthropic.claude-3-opus-20240229-v1:0": {"system_prompt": True, "tool_use": True},
+        "anthropic.claude-instant-v1": {"system_prompt": True, "tool_use": False},
+        "cohere.command-r-v1:0": {"system_prompt": True, "tool_use": True},
+        "cohere.command-r-plus-v1:0": {"system_prompt": True, "tool_use": True},
+        "meta.llama2-13b-chat-v1": {"system_prompt": True, "tool_use": False},
+        "meta.llama2-70b-chat-v1": {"system_prompt": True, "tool_use": False},
+        "mistral.mistral-7b-instruct-v0:2": {"system_prompt": False, "tool_use": False},
+        "mistral.mixtral-8x7b-instruct-v0:1": {"system_prompt": False, "tool_use": False},
+        "mistral.mistral-large-2402-v1:0": {"system_prompt": True, "tool_use": True},
+        "mistral.mistral-small-2402-v1:0": {"system_prompt": True, "tool_use": False},
+        "ai21.j2-mid-v1": {"system_prompt": False, "tool_use": False},
+        "ai21.j2-ultra-v1": {"system_prompt": False, "tool_use": False}
+    }
+        
+    def __init__(self, agent_config):
+        self.platform = "bedrock"
+        global env
+        env = Environment.getInstance()
+        self.name = agent_config['name']
+        self.role = agent_config['role']
+        self.system_prompt = agent_config['system_prompt']
+        self.model = agent_config['model']
+        self.function_names = agent_config.get('functions', [])
+        self.thread = []
+        self.function_definitions = self.load_function_definitions(self.function_names)
+        self.function_definitions = [self.translate_function_definition(x) for x in self.function_definitions]
+        self.config = configparser.ConfigParser()
+        self.config.read(os.path.join(os.getcwd(), "config.ini"))
+        self.aws_access_key_id = self.config["API_Keys"]["aws_access_key_id"]
+        self.aws_secret_access_key = self.config["API_Keys"]["aws_secret_access_key"]
+        self.session = boto3.Session(
+            aws_access_key_id=self.aws_access_key_id,
+            aws_secret_access_key=self.aws_secret_access_key,
+            region_name="us-east-1"
+        )
+        self.client = self.session.client(service_name='bedrock-runtime')
+        capabilities = self.MODEL_CAPABILITIES.get(self.model, {})
+        if not capabilities.get("system_prompt", False):
+            logging.warning(f"System prompts are not supported for the model {self.model}.")
+            self.thread = [msg for msg in self.thread if msg["role"] != "system"]
+        if not capabilities.get("tool_use", False):
+            logging.warning(f"Tool use is not supported for the model {self.model}.")
+            self.function_definitions = []
+
+    def translate_function_definition(self, source):
+        target = {
+            "toolSpec": {
+                "name": source["name"],
+                "description": source["description"],
+                "inputSchema": {
+                    "json": {
+                        "type": "object",
+                        "properties": source["parameters"]["properties"],
+                        "required": source["parameters"]["required"]
+                    }
+                }
+            }
+        }
+        return target
+
+    def load_function_definitions(self, function_names):
+        function_definitions = []
+        for function_name in function_names:
+            function_file = os.path.join(os.getcwd(), "functions", function_name + ".function")
+            self.validate_function_file(function_file)
+            with open(function_file, 'r') as file:
+                function_definition = json.load(file)
+                function_definitions.append(function_definition)
+        return function_definitions
+
+    async def generate_message(self, prompt, images=[]):
+        content = [{"text": prompt}]
+        if images:
+            for image_data in images:
+                image_base64 = base64.b64encode(image_data).decode('utf-8')
+                content.append({"image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}})
+
+        self.thread.append({"role": "user", "content": content})
+        try:
+            tools = [{"toolSpec": f['toolSpec']} for f in self.function_definitions]
+
+            if self.function_definitions and not self.system_prompt:
+                response = self.client.converse(
+                    modelId=self.model,
+                    messages=self.thread,
+                    toolConfig={"tools": tools}
+                )
+            elif self.function_definitions and self.system_prompt:
+                response = self.client.converse(
+                    modelId=self.model,
+                    messages=self.thread,
+                    toolConfig={"tools": tools},
+                    system=[{"text": self.system_prompt}]
+                )
+            elif not self.function_definitions and self.system_prompt:
+                response = self.client.converse(
+                    modelId=self.model,
+                    messages=self.thread,
+                    system=[{"text": self.system_prompt}]
+                )
+            else:
+                response = self.client.converse(
+                    modelId=self.model,
+                    messages=self.thread
+                )   
+        except self.client.exceptions.ClientError as e:
+            logging.error(f"Error communicating with Bedrock: {e}")
+            return f"Error: {str(e)}"
+
+        output_message = response['output']['message']
+        #self.thread.append(output_message)
+
+        stop_reason = response['stopReason']
+
+        if stop_reason == 'tool_use':
+            tool_requests = response['output']['message']['content']
+            tool_text_response = [response['output']['message']['content'][i]['text'] for i in range(len(tool_requests)) if 'text' in tool_requests[i]][0] if len([response['output']['message']['content'][i]['text'] for i in range(len(tool_requests)) if 'text' in tool_requests[i]]) > 0 else "..."
+            self.thread.append({"role": "assistant", "content": tool_requests})
+            for tool_request in tool_requests:
+                if 'toolUse' in tool_request:
+                    tool = tool_request['toolUse']
+                    logging.info("Requesting tool %s. Request: %s", tool['name'], tool['toolUseId'])
+
+                    if tool['name'] in [f['toolSpec']['name'] for f in self.function_definitions]:
+                        tool_result = {}
+                        try:
+                            function_name = tool['name']
+                            function_args = tool['input']
+                            function_result = self.call_function(function_name, function_args)
+                            tool_result = {
+                                "toolUseId": tool['toolUseId'],
+                                "content": [{"text": str(function_result)}]
+                            }
+                        except Exception as err:
+                            tool_result = {
+                                "toolUseId": tool['toolUseId'],
+                                "content": [{"text": err.args[0]}],
+                                "status": 'error'
+                            }
+
+                        tool_result_message = {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "toolResult": tool_result
+                                }
+                            ]
+                        }
+                        self.thread.append(tool_result_message)
+                        try:
+                            response = self.client.converse(
+                                modelId=self.model,
+                                messages=self.thread,
+                                toolConfig={"tools": tools}
+                            )
+                        except self.client.exceptions.ClientError as e:
+                            logging.error(f"Error communicating with Bedrock: {e}")
+                            return f"Error: {str(e)}"
+
+                        output_message = response['output']['message']
+
+        result = "\n".join([c['text'] for c in output_message['content']])
+        self.thread.append({"role": "assistant", "content": [{"text": f"{tool}"}]})
+        return f"{tool_text_response}\n{result}"
+    async def terminate(self, remove_files=False):
+        # Placeholder for any termination logic if needed
+        return f"Agent: {self.name}, Role: {self.role}, Model: {self.model}, Tools: {self.tools}, Functions: {self.functions}, Files: {self.files}"
+
+    async def load_thread(self, local_thread, user_agent="user", assistant_agent="assistant", role_map=None):
+       
+        bedrock_thread = []
+        if len(local_thread.messages) > 0:
+            for message in local_thread.messages:
+                if (message.sender != user_agent and message.recipient != assistant_agent) or (message.sender != assistant_agent and message.recipient != user_agent) and role_map is None:
+                    raise Exception(f"Provided agent aliases do not match the sender and recipient of the messages in the local thread. The sender and recipient of the first message in the local thread are {message.sender} and {message.recipient} respectively, while the provided aliases are {role_map.keys()}.")
+                if role_map is not None:
+                    for key, value in role_map.items():
+                        if key not in [message.sender, message.recipient]:
+                            raise Exception(f"Provided agent aliases do not match the sender and recipient of the messages in the local thread. The sender and recipient of the first message in the local thread are {message.sender} and {message.recipient} respectively, while the provided aliases are {role_map.keys()}.")
+                        if value not in ["user", "assistant"]:
+                            raise Exception(f"Invalid role: {value}, agent must be mapped must be either 'user' or 'assistant'")
+                role_map = {user_agent: 'user', assistant_agent: 'assistant'}
+        if not role_map:
+            role_map = {user_agent: 'user', assistant_agent: 'assistant'}
+        # Iterate over local messages and create them in the Bedrock thread
+        for local_message in local_thread.messages:
+            sender = local_message.sender
+            role = role_map[sender]
+            bedrock_thread.append({"role": role, "content": [{"text": local_message.content}]})
+
+        self.thread = bedrock_thread
         return

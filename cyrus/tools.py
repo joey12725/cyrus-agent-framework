@@ -6,9 +6,14 @@ from rich.markdown import Markdown
 from openai import OpenAI
 import os
 from time import sleep
-os.environ["OPENAI_API_KEY"] = "REDACTED_OPENAI_KEY"
+import configparser
 
-client = OpenAI()
+#get openai api key from config.ini
+configfile = configparser.ConfigParser()
+configfile.read(os.path.join(os.getcwd(), "config.ini"))
+api_key = configfile["API_Keys"]["openai"]
+
+client = OpenAI(api_key=api_key)
 
 
 global env

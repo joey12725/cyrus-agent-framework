@@ -144,7 +144,6 @@ class Environment:
         for function in self.function_status:
             if self.function_status.get(function) != "in progress":
                 self.function_status[function] = False
-                print(f"Flag for {function} set to False")
         
         if new_conversation:
             new_thread = Thread()

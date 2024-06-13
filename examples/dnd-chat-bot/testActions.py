@@ -2,8 +2,8 @@ from cyrus import *
 import random
 import asyncio
 async def main():
-    env = Environment.getInstance()
-    agent = await Agent.create("dm-llama")
+    env = Environment.getInstance(project_name="dev")
+    agent = await Agent.create("dm-haiku")
 
     action = talks_to("user", agent, context="Help the player come up with a characeter.")    
     #action = talks_to(agent, "self", context="Trade dnd theamed roasts/joking insults with the user. This is not a game of dnd, just some relaxing humor. This is not in charecter. Responses should be short and quippy.")

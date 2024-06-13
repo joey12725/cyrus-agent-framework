@@ -3,7 +3,7 @@ import asyncio
 
 async def main():
     # Create the agent asynchronously
-    dm = await Agent.create("dm")
+    dm = await Agent.create("dm-haiku")
     env = Environment.getInstance()
 
     # Create the actions

@@ -8,17 +8,11 @@ import os
 from time import sleep
 import configparser
 
-#get openai api key from config.ini
-configfile = configparser.ConfigParser()
-configfile.read(os.path.join(os.getcwd(), "config.ini"))
-api_key = configfile["API_Keys"]["openai"]
-
-client = OpenAI(api_key=api_key)
 
 
 global env
-env = Environment.getInstance()
 console = Console()
+
 
 def render_markdown(text):
     """Render Markdown text to the terminal."""
@@ -26,6 +20,7 @@ def render_markdown(text):
     console.print(markdown)
 
 def vprint(*args):
+    env = Environment.getInstance()
     if env.config["verbose"]:
         #if args is blank, print a newline
         if args == ():
@@ -35,6 +30,8 @@ def vprint(*args):
 
 def open_ai_cleanup():
     #delete all agents
+    env = Environment.getInstance()
+    client = OpenAI(api_key=env.config["API_Keys"]["openai"])
     for i in range(100):
         try:
             assistants = client.beta.assistants.list(limit=100)

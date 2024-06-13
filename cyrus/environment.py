@@ -2,7 +2,7 @@ import configparser
 import os
 import uuid
 import datetime
-
+import logging
 import uuid
 import datetime
 import os
@@ -94,16 +94,23 @@ class Environment:
     _instance = None
 
     @staticmethod
-    def getInstance():
+    def getInstance(project_name=None):
         if Environment._instance is None:
-            Environment()
+            Environment(project_name)
         return Environment._instance
 
-    def __init__(self):
+    def __init__(self, project_name):
         if Environment._instance is not None:
             raise Exception("This class is a singleton!")
         else:
             Environment._instance = self
+
+        if project_name is None:
+            raise ValueError("project_name must be provided when first instantiating the Environment")
+        
+        forbidden_characters = [" ", ".", ",", ":", ";", "'", "\"", "!", "?", "(", ")", "[", "]", "{", "}", "<", ">", "/", "\\", "|", "*", "&", "^", "%", "$", "#", "@", "~", "`", "+", "-", "=", "_"]
+        if any([char for char in project_name if char in forbidden_characters]) or project_name == "":
+            raise ValueError("project_name must be a string without spaces or special characters")
         
         self.variables = {}
         self.function_status = {}
@@ -112,10 +119,13 @@ class Environment:
         self.functions = []
         self.config = {}
         self.configfile = configparser.ConfigParser()
-        
-        if not os.path.exists(os.path.join(os.getcwd(), "config.ini")):
-            raise Exception("config.ini not found")
-        
+        if project_name is not None:
+            self.config["project_name"] = project_name
+        else:
+            raise ValueError("project_name must be provided")
+        if not os.path.exists(os.path.join(os.getcwd(), f"{project_name}.ini")):
+            logging.warning("config.ini not found for project, using default configuration.")
+            config_path = os.path.join(os.getcwd(), "front-end", "resources", "default", "config.ini")
         self.clear()
 
     def clear(self):
@@ -127,12 +137,19 @@ class Environment:
         self.flow['kill_state'] = False
         self.flow['current_state'] = self.flow.get('start_state')
 
-        if os.path.exists(os.path.join(os.getcwd(), "config.ini")):
-            self.configfile.read(os.path.join(os.getcwd(), "config.ini"))
+        if os.path.exists(os.path.join(os.getcwd(), f"{self.config["project_name"]}.ini")):
+            self.configfile.read(os.path.join(os.getcwd(), f"{self.config["project_name"]}.ini"))
+            self.config["project_directory"] = self.configfile["Settings"]["project_directory"].replace("\"", "")
             self.config['memory_mode'] = self.configfile["Settings"]["memory_mode"].replace("\"", "")
             self.config['verbose'] = self.configfile["Settings"]["verbose"].replace("\"", "").lower() == "true"
             self.config['export_env'] = self.configfile["Settings"]["export_env"].replace("\"", "").lower() == "true"
             self.config['token_limit'] = int(self.configfile["Settings"]["token_limit"].replace("\"", ""))
+            self.config["API_Keys"] = {}
+            self.config["API_Keys"]["openai"] = self.configfile["API_Keys"]["openai"]
+            self.config["API_Keys"]["perplexity"] = self.configfile["API_Keys"]["perplexity"]
+            self.config["API_Keys"]["aws_access_key_id"] = self.configfile["API_Keys"]["aws_access_key_id"].strip()
+            self.config["API_Keys"]["aws_secret_access_key"] = self.configfile["API_Keys"]["aws_secret_access_key"].strip()
+            self.config["API_Keys"]["cohere"] = self.configfile["API_Keys"]["cohere"]
         else:
             print("config.ini not found, unable to re-read configuration.")
 

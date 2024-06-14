@@ -35,7 +35,7 @@ class returns(Function):
     def run(self):
         if self.value == "*":
             return self.env.function_status.get(self.function) == "completed"
-        return self.env.variables.get('value') == self.value and self.env.function_status.get(self.function) == "completed"
+        return str(self.env.variables.get('value')) == str(self.value) and self.env.function_status.get(self.function) == "completed"
 
 class turn(Function):
     def __init__(self, turn):
@@ -150,7 +150,7 @@ class in_(Function):
         self.value = value
         self.list = list_
     def run(self):
-        return self.value in self.list
+        return str(self.value) in str([str(x) for x in self.list])
 
 class not_in_(Function):
     def __init__(self, value, list_):
@@ -165,3 +165,7 @@ class index(Function):
         self.key = key
     def run(self):
         return self.dict[self.key]
+
+class false_function(Function):
+    def run(self):
+        return False

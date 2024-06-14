@@ -1,7 +1,7 @@
 import os
 import sys
 import configparser
-from cyrus import Agent, State, Environment, cFlow, render_markdown, vprint, Thread
+from cyrus import Agent, Environment, cFlow, render_markdown, vprint, Thread, false_function
 from colorama import Fore, Style
 from rich.console import Console
 from rich.markdown import Markdown
@@ -9,6 +9,7 @@ import importlib.util
 import json
 import asyncio
 from time import sleep
+
 class Action:
     def __init__(self):
         global env 
@@ -19,7 +20,7 @@ class Action:
         self.agents = []
 
 class talks_to(Action):
-    def __init__(self, agent1, agent2, state=None, context="", load_memory=False, until=False, new_conversation=True):
+    def __init__(self, agent1, agent2, state=None, context="", load_memory=False, until=false_function(), new_conversation=True):
         super().__init__()
         self.context = context
         self.until = until
@@ -42,6 +43,8 @@ class talks_to(Action):
                 user_speaks_first = True if agent1 == "user" else False
                 agent = non_user_agent
                 self.agent = agent
+                self.agent1 = agent1
+                self.agent2 = agent2
             else:
                 self.agent1 = agent1
                 self.agent2 = agent2
@@ -51,6 +54,8 @@ class talks_to(Action):
                 user_speaks_first = True if agent1 == "user" else False
                 agent = non_user_agent
                 self.agent = agent
+                self.agent1 = agent1
+                self.agent2 = agent2
             else:
                 self.agent1 = agent1
                 self.agent2 = agent2
@@ -60,7 +65,6 @@ class talks_to(Action):
                 user_speaks_first = True if agent1 == "user" else False
                 agent = non_user_agent
                 self.agent = agent
-            else:
                 self.agent1 = agent1
                 self.agent2 = agent2
 
@@ -128,7 +132,7 @@ class talks_to(Action):
 
         # Periodic transition check
 
-        if not self.until:
+        if not self.until.run():
             return await self.step_conversation_user(agent)
         else:
             return
@@ -165,7 +169,7 @@ class talks_to(Action):
         if await self.check_transitions():
             return
 
-        if not self.until and not env.flow['kill_state']:
+        if not self.until.run() and not env.flow['kill_state']:
             return await self.step_conversation_agent(agent1, agent2)
         else:
             return
@@ -194,18 +198,43 @@ class talks_to(Action):
         if self.conversation_type == "self":
             return f"{self.agent1.name} talks to itself"
 
-
-class reflect(Action):
-    def __init__(self, agent, context=""):
+class cot(Action):
+    def __init__(self, agent, context="", prompts=[]):
         self.agent = agent
         self.context = context
-    
-    async def run(self, context=""):
-        if not context:
-            await self.agent.reflect()
-        else:
-            await self.agent.reflect(context=context)
-        return
+        self.prompts = prompts
+
+    async def run(self, context="", prompts=[]):
+        context = context
+        if self.agent.use_memory and self.context:
+            context = await self.add_memory_context(context)
+        if self.agent.use_rerank_documents and self.context:
+            context = await self.add_document_context(context)
+        await self.agent.cot(context=context, prompts=self.prompts)
+
+    async def add_memory_context(self, context):
+        memory_mode = env.config['memory_mode']
+        thread = env.messages['current_thread']
+        if memory_mode == "state-persistent":
+            results = env.vdb.get_most_relevant_message(query_text=thread.dump(token_saver=True), state=thread.state, k=5)
+            relevant_memory = [msg for msg in results if msg['metadata']['thread_id'] != thread.id]
+            if relevant_memory:
+                context += "\nMEMORY: " + relevant_memory[0]['document']
+        elif memory_mode == "agent-persistent":
+            results_sender = env.vdb.get_most_relevant_message(query_text=thread.dump(token_saver=True), sender=self.agent.name, k=5)
+            results_recipient = env.vdb.get_most_relevant_message(query_text=thread.dump(token_saver=True), recipient=self.agent.name, k=5)
+            relevant_memory = [msg for msg in results_sender + results_recipient if msg['metadata']['thread_id'] != thread.id]
+            if relevant_memory:
+                context += "\nMEMORY: " + relevant_memory[0]['document']
+        return context
+
+    async def add_document_context(self, context):
+        thread = env.messages['current_thread']
+        relevant_document = env.vdb.get_nearest_document_chunk(query_text=thread.dump(token_saver=True), k=1)
+        if relevant_document:
+            context += "\nDOCUMENT: " + relevant_document
+        return context
+
 
 class call(Action):
     def __init__(self, function_name, args_dict):

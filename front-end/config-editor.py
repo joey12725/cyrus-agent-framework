@@ -56,15 +56,16 @@ st.sidebar.header('Options')
 option = st.sidebar.selectbox('Choose an option', ('Edit Existing Project', 'Create New Project'))
 
 if option == 'Edit Existing Project':
-    ini_files = [f for f in os.listdir() if f.endswith('.ini')]
-    selected_file = st.sidebar.selectbox('Select an INI file', ini_files)
+    ini_files = [f for f in os.listdir(os.path.join(os.getcwd(), "config-files")) if f.endswith('.ini')]
+    selected_file = os.path.join(os.getcwd(), "config-files", st.sidebar.selectbox('Select an INI file', ini_files))
     if selected_file:
         config = load_ini_file(selected_file)
+        print(dict(config))
 
         st.header('Edit INI File')
 
         project_directory = st.text_input('Project Directory', config['Settings']['project_directory'])
-        memory_mode = st.text_input('Memory Mode', config['Settings']['memory_mode'])
+        memory_mode = st.selectbox('Memory Mode', ["ephemeral", "state-persistent", "agent-persistent"], index=["ephemeral", "state-persistent", "agent-persistent"].index(config['Settings']['memory_mode']))
         token_limit = st.number_input('Token Limit', value=int(config['Settings']['token_limit']))
         verbose = st.checkbox('Verbose', value=config['Settings'].getboolean('verbose'))
         export_env = st.checkbox('Export Env', value=config['Settings'].getboolean('export_env'))
@@ -114,7 +115,7 @@ elif option == 'Create New Project':
 
     new_file_name = st.text_input('INI File Name', 'new_project.ini')
     project_directory = st.text_input('Project Directory', '')
-    memory_mode = st.text_input('Memory Mode', 'ephemeral')
+    memory_mode = st.selectbox('Memory Mode', ["ephemeral", "state-persistent", "agent-persistent"], index=0)
     token_limit = st.number_input('Token Limit', value=100000)
     verbose = st.checkbox('Verbose', value=True)
     export_env = st.checkbox('Export Env', value=False)
@@ -126,8 +127,8 @@ elif option == 'Create New Project':
     cohere_key = st.text_input('Cohere Key', '')
 
     st.subheader('Load API Keys from Another Project')
-    ini_files = [f for f in os.listdir() if f.endswith('.ini')]
-    load_keys_file = st.selectbox('Select an INI file to load API keys from', ini_files)
+    ini_files = [f for f in os.listdir(os.path.join(os.getcwd(), "config-files")) if f.endswith('.ini')]
+    load_keys_file = os.path.join("config-files", st.selectbox('Select an INI file to load API keys from', ini_files))
     if st.button('Load API Keys'):
         if load_keys_file:
             api_keys = load_api_keys_from_file(load_keys_file)

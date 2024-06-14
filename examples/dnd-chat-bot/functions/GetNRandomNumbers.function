@@ -1,0 +1,30 @@
+{
+    "name": "GetNRandomNumbers",
+    "dependencies": [
+        "random"
+    ],
+    "description": "Get n random numbers between 2 values",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "upper_bound": {
+                "type": "string",
+                "description": "Highest number each number can be"
+            },
+            "lower_bound": {
+                "type": "string",
+                "description": "Lowest value each number can be"
+            },
+            "number_of_random_numbers": {
+                "type": "string",
+                "description": "Number of numbers to generate"
+            }
+        },
+        "required": [
+            "upper_bound",
+            "lower_bound",
+            "number_of_random_numbers"
+        ]
+    },
+    "id": "279b4c7c-9f70-4950-b24e-e6d6a916798a"
+}

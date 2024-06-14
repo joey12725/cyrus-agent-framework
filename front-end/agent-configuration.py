@@ -7,7 +7,7 @@ import os
 
 #before loading the rest of the code, we need to set the project name from a dropdown
 #the options are any .ini files in os.getcwd() with the .ini removed
-project_name = st.selectbox("Select Project", [f[:-4] for f in os.listdir(os.getcwd()) if f.endswith(".ini")])
+project_name = st.selectbox("Select Project", [f[:-4] for f in os.listdir(os.path.join(os.getcwd(), "config-files")) if f.endswith(".ini")])
 
 global env
 env = Environment.getInstance(project_name=project_name)
@@ -123,7 +123,10 @@ if st.sidebar.button("Add New Agent"):
         "system_prompt": "",
         "profile_picture": os.path.join(os.getcwd(), "resources", "profile_images", random.choice(os.listdir(os.path.join(os.getcwd(), "resources", "profile_images")))),
         "functions": [],
-        "documents": []
+        "documents": [],
+        "use_rerank_documents": False,
+        "use_memory": False,
+        "use_rerank_memory": False
     }
     st.session_state.agents.append(new_agent)
     st.session_state.selected_agent = len(st.session_state.agents) - 1
@@ -140,7 +143,13 @@ with st.form("agent_form"):
     # Ensure default documents are in the available documents
     valid_default_documents = [doc for doc in selected_agent["documents"] if doc in available_documents]
     documents = st.multiselect("Documents", available_documents, default=valid_default_documents)
-    
+    use_rerank_documents = st.checkbox("Use Cohere Rerank for improved document search", value="rerank" in selected_agent.get("functions", []))
+    use_memory = st.checkbox("Use Retrieval Augmented Memory", value="memory" in selected_agent.get("functions", []))
+    if use_memory
+        use_rerank_memory = st.checkbox("Use Cohere Rerank for improved memory search", value="rerank_memory" in selected_agent.get("functions", []))
+    else:
+        use_rerank_memory = False
+
     submitted = st.form_submit_button("Save Configuration")
 
 if submitted:
@@ -153,6 +162,9 @@ if submitted:
         "functions": functions,
         "documents": documents,
         "profile_picture": selected_agent.get("profile_picture", random.choice(os.listdir(os.path.join(os.getcwd(), "resources", "profile_images"))))
+        "use_rerank_documents": use_rerank_documents,
+        "use_memory": use_memory,
+        "use_rerank_memory": use_rerank_memory
     })
 
     with open(os.path.join(path_to_agents, name + ".agent"), "w") as file:

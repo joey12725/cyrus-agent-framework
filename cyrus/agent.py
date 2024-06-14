@@ -35,7 +35,6 @@ class Agent(ABC):
     async def create(cls, agent_config_file):
         global env
         env = Environment.getInstance()
-        print(env.config)
         agent_config_file = os.path.join(env.config["project_directory"], "agents", agent_config_file + ".agent")
         cls.validate_agent_file(agent_config_file)
         # Load agent config file as JSON
@@ -72,9 +71,6 @@ class Agent(ABC):
                 ret = cls.get_response(prompt)
             return ret
     
-    @classmethod
-    def reflect(cls, context=None):
-        return cls.cot(context=context)
 
     @classmethod
     def call_function(cls, function, args):
@@ -103,7 +99,7 @@ class Agent(ABC):
         env.function_status[function] = "in progress"
         ret = func(**args)
         env.function_status[function] = "completed"
-        return ret
+        return str(ret)
 
     @classmethod
     def validate_function_file(cls, function_file):
@@ -164,7 +160,7 @@ class Agent(ABC):
                     raise Exception(f"Invalid tool: {tool}")
 
     def __str__(self):
-        return f"Agent: {self.name}, Platform: {self.platform}, Role: {self.role}, Model: {self.model}, Tools: {self.tools}, Functions: {self.functions}, Files: {self.files}"
+        return f"Agent: {self.name}"
 
 class OAIAgent(Agent):
     def __init__(self, agent_config):
@@ -176,10 +172,14 @@ class OAIAgent(Agent):
         self.system_prompt = agent_config['system_prompt']
         self.model = agent_config['model']
         self.function_names = agent_config.get('functions', [])
+        self.use_memory = agent_config.get('use_memory', False)
+        self.use_rerank_memory = agent_config.get('use_rerank_memory', False)
+        self.use_rerank_documents = agent_config.get('use_rerank_documents', False)
         self.thread = [{"role": "system", "content": self.system_prompt}]
         self.function_definitions = self.load_function_definitions(self.function_names)
         self.function_definitions = [{"type": "function", "function": x}  for x in self.function_definitions]
         self.client = OpenAI(api_key=env.config["API_Keys"]["openai"])
+        self.documents = agent_config.get('documents', [])
 
     
     def load_function_definitions(self, function_names):
@@ -234,9 +234,10 @@ class OAIAgent(Agent):
                     "tool_call_id": tool_call_id,
                     "role": "tool",
                     "name": function_name,
-                    "content": function_result,
+                    "content": [{"text": str(function_result)}],
                 }
             )
+            print(self.thread)
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=self.thread
@@ -248,8 +249,8 @@ class OAIAgent(Agent):
 
     async def terminate(self, remove_files=False):
         # Placeholder for any termination logic if needed
-        return f"Agent: {self.name}, Role: {self.role}, Model: {self.model}, Tools: {self.tools}, Functions: {self.functions}, Files: {self.files}"
-
+        return 
+    
     async def load_thread(self, local_thread, user_agent="user", assistant_agent="assistant", role_map=None):
         openai_thread = [{"role": "system", "content": self.system_prompt}]
         if len(local_thread.messages) > 0:
@@ -286,9 +287,12 @@ class PerplexityAgent(OAIAgent):
         self.function_names = agent_config.get('functions', [])
         self.thread = [{"role": "system", "content": self.system_prompt}]
         self.function_definitions = self.load_function_definitions(self.function_names)
+        self.use_memory = agent_config.get('use_memory', False)
+        self.use_rerank_memory = agent_config.get('use_rerank_memory', False)
+        self.use_rerank_documents = agent_config.get('use_rerank_documents', False)
         self.function_definitions = [{"type": "function", "function": x}  for x in self.function_definitions]
         self.client =  OpenAI(api_key=env.config["API_Keys"]["perplexity"], base_url="https://api.perplexity.ai")
-
+        self.documents = agent_config.get('documents', [])
 class BedrockAgent(Agent):
         
     def __init__(self, agent_config):
@@ -323,9 +327,13 @@ class BedrockAgent(Agent):
         self.function_names = agent_config.get('functions', []) if MODEL_CAPABILITIES.get(agent_config['model'], {}).get("tool_use", False) else []
         self.thread = []
         self.function_definitions = self.load_function_definitions(self.function_names)
+        self.use_memory = agent_config.get('use_memory', False)
+        self.use_rerank_memory = agent_config.get('use_rerank_memory', False)
+        self.use_rerank_documents = agent_config.get('use_rerank_documents', False)
         self.function_definitions = [self.translate_function_definition(x) for x in self.function_definitions]
         access_key_id = str(env.config["API_Keys"]["aws_access_key_id"])
         secret_access_key = str(env.config["API_Keys"]["aws_secret_access_key"])
+        self.documents = agent_config.get('documents', [])
         self.session = boto3.Session(
             aws_access_key_id=access_key_id,
             aws_secret_access_key=secret_access_key,
@@ -466,7 +474,7 @@ class BedrockAgent(Agent):
             return result
     async def terminate(self, remove_files=False):
         # Placeholder for any termination logic if needed
-        return f"Agent: {self.name}, Role: {self.role}, Model: {self.model}, Tools: {self.tools}, Functions: {self.functions}, Files: {self.files}"
+        return
 
     async def load_thread(self, local_thread, user_agent="user", assistant_agent="assistant", role_map=None):
        

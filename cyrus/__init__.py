@@ -7,6 +7,7 @@ from cyrus.environment import Thread
 from cyrus.environment import Message
 from cyrus.agent import Agent
 from cyrus.flow import cFlow
+from cyrus.functions import false_function
 from cyrus.actions import Action
 from cyrus.states import State
 from cyrus.transition import Transition

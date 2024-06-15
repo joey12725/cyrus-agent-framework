@@ -9,6 +9,6 @@
         "rollDice"
     ],
     "documents": [],
-    "platform": "openai"
+    "platform": "openai",
     "use_memory": true
 }

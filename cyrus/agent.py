@@ -4,15 +4,12 @@ import importlib.util
 import inspect
 import asyncio
 import base64
-import configparser
 from openai import OpenAI
 from abc import ABC, abstractmethod
 from cyrus import Environment, Message, Thread, vprint
 import boto3
-import json
 import logging
 import random
-import streamlit as st
 
 class Agent(ABC):
     @abstractmethod
@@ -201,9 +198,6 @@ class OAIAgent(Agent):
         
         self.thread.append({"role": "user", "content": prompt})
         if self.function_definitions:
-            with open("note.txt", "w") as f:
-                f.write(f"function_definitions: {self.function_definitions}, type: {type(self.function_definitions)}")
-            
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=self.thread,
@@ -237,7 +231,6 @@ class OAIAgent(Agent):
                     "content": [{"text": str(function_result)}],
                 }
             )
-            print(self.thread)
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=self.thread

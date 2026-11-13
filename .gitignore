@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.env
+
+# Project configs hold API keys. Commit the *.ini.example templates only.
+**/config-files/*.ini
+**/config.ini
+
+.DS_Store
+.vscode/
+*.vsix
+node_modules/

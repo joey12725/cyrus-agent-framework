@@ -143,10 +143,10 @@ with st.form("agent_form"):
     # Ensure default documents are in the available documents
     valid_default_documents = [doc for doc in selected_agent["documents"] if doc in available_documents]
     documents = st.multiselect("Documents", available_documents, default=valid_default_documents)
-    use_rerank_documents = st.checkbox("Use Cohere Rerank for improved document search", value="rerank" in selected_agent.get("functions", []))
-    use_memory = st.checkbox("Use Retrieval Augmented Memory", value="memory" in selected_agent.get("functions", []))
-    if use_memory
-        use_rerank_memory = st.checkbox("Use Cohere Rerank for improved memory search", value="rerank_memory" in selected_agent.get("functions", []))
+    use_rerank_documents = st.checkbox("Use Cohere Rerank for improved document search", value=selected_agent.get("use_rerank_documents", False))
+    use_memory = st.checkbox("Use Retrieval Augmented Memory", value=selected_agent.get("use_memory", False))
+    if use_memory:
+        use_rerank_memory = st.checkbox("Use Cohere Rerank for improved memory search", value=selected_agent.get("use_rerank_memory", False))
     else:
         use_rerank_memory = False
 
@@ -161,7 +161,7 @@ if submitted:
         "system_prompt": system_prompt,
         "functions": functions,
         "documents": documents,
-        "profile_picture": selected_agent.get("profile_picture", random.choice(os.listdir(os.path.join(os.getcwd(), "resources", "profile_images"))))
+        "profile_picture": selected_agent.get("profile_picture", random.choice(os.listdir(os.path.join(os.getcwd(), "resources", "profile_images")))),
         "use_rerank_documents": use_rerank_documents,
         "use_memory": use_memory,
         "use_rerank_memory": use_rerank_memory

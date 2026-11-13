@@ -7,9 +7,16 @@ import chromadb
 from openai import OpenAI
 import cohere
 from uuid import uuid4
-import datetime
-import os
-import pickle
+
+# Keys can live in the [API_Keys] section of the project .ini file or in the
+# environment. The .ini value wins when both are set.
+API_KEY_ENV_VARS = {
+    "openai": "OPENAI_API_KEY",
+    "perplexity": "PERPLEXITY_API_KEY",
+    "aws_access_key_id": "AWS_ACCESS_KEY_ID",
+    "aws_secret_access_key": "AWS_SECRET_ACCESS_KEY",
+    "cohere": "COHERE_API_KEY",
+}
 
 class VectorDatabase:
     def __init__(self, openai_api_key, cohere_api_key):
@@ -229,11 +236,10 @@ class Environment:
             self.config['export_env'] = self.configfile["Settings"]["export_env"].replace("\"", "").lower() == "true"
             self.config['token_limit'] = int(self.configfile["Settings"]["token_limit"].replace("\"", ""))
             self.config["API_Keys"] = {}
-            self.config["API_Keys"]["openai"] = self.configfile["API_Keys"]["openai"]
-            self.config["API_Keys"]["perplexity"] = self.configfile["API_Keys"]["perplexity"]
-            self.config["API_Keys"]["aws_access_key_id"] = self.configfile["API_Keys"]["aws_access_key_id"].strip()
-            self.config["API_Keys"]["aws_secret_access_key"] = self.configfile["API_Keys"]["aws_secret_access_key"].strip()
-            self.config["API_Keys"]["cohere"] = self.configfile["API_Keys"]["cohere"]
+            keys = self.configfile["API_Keys"] if self.configfile.has_section("API_Keys") else {}
+            for name, env_var in API_KEY_ENV_VARS.items():
+                value = keys.get(name, "").strip().strip("\"") or os.environ.get(env_var, "")
+                self.config["API_Keys"][name] = value
             print("Configuration re-read successfully, all configuration variables have been reset.")
         else:
             raise FileNotFoundError("config.ini not found, unable to re-read configuration.")

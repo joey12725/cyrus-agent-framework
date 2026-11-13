@@ -4,29 +4,47 @@
   "description": "Support for .agent, .cflow and .function files in the Cyrus framework.",
   "version": "1.0.0",
   "publisher": "cyrus",
+  "license": "MIT",
   "main": "./src/extension.js",
   "engines": {
     "vscode": "^1.58.0"
   },
-  "categories": ["Programming Languages"],
+  "categories": [
+    "Programming Languages"
+  ],
   "contributes": {
     "languages": [
       {
         "id": "cflow",
-        "aliases": ["CFlow", "cflow"],
-        "extensions": [".cflow"],
+        "aliases": [
+          "CFlow",
+          "cflow"
+        ],
+        "extensions": [
+          ".cflow"
+        ],
         "configuration": "./language-configuration/cflow-language-configuration.json"
       },
       {
         "id": "agent",
-        "aliases": ["Agent", "agent"],
-        "extensions": [".agent"],
+        "aliases": [
+          "Agent",
+          "agent"
+        ],
+        "extensions": [
+          ".agent"
+        ],
         "configuration": "./language-configuration/agent-language-configuration.json"
       },
       {
         "id": "function",
-        "aliases": ["Function", "function"],
-        "extensions": [".function"],
+        "aliases": [
+          "Function",
+          "function"
+        ],
+        "extensions": [
+          ".function"
+        ],
         "configuration": "./language-configuration/function-language-configuration.json"
       }
     ],

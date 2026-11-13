@@ -1,10 +1,7 @@
 import os
 import sys
-import configparser
 from cyrus import Agent, Environment, cFlow, render_markdown, vprint, Thread, false_function
-from colorama import Fore, Style
 from rich.console import Console
-from rich.markdown import Markdown
 import importlib.util
 import json
 import asyncio
@@ -200,6 +197,7 @@ class talks_to(Action):
 
 class cot(Action):
     def __init__(self, agent, context="", prompts=[]):
+        super().__init__()
         self.agent = agent
         self.context = context
         self.prompts = prompts
@@ -298,6 +296,7 @@ class println(Action):
 
 class loop(Action):
     def __init__(self, lst, iterator, actions):
+        super().__init__()
         self.lst = lst
         self.iterator = iterator
         self.actions = actions

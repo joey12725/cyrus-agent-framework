@@ -1,8 +1,6 @@
 from cyrus import Agent, Environment, vprint
 import os
 import configparser
-import matplotlib.pyplot as plt
-import networkx as nx
 import asyncio
 
 class cFlow:

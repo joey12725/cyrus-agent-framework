@@ -1,4 +1,0 @@
-States require a sleep statement between them to allow spindown (should probably implament a spindown function instead)
-
-Knowlwedgebases have administrator access
-

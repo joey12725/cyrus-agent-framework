@@ -1,0 +1,19 @@
+; Copy to dnd.ini and fill in the providers you plan to use.
+; Any key left blank falls back to its environment variable
+; (OPENAI_API_KEY, PERPLEXITY_API_KEY, AWS_ACCESS_KEY_ID,
+; AWS_SECRET_ACCESS_KEY, COHERE_API_KEY).
+
+[Settings]
+project_directory = ../examples/dnd-chat-bot
+; ephemeral | state-persistent | agent-persistent
+memory_mode = ephemeral
+token_limit = 100000
+verbose = true
+export_env = false
+
+[API_Keys]
+openai =
+perplexity =
+aws_access_key_id =
+aws_secret_access_key =
+cohere =

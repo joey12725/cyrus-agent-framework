@@ -7,7 +7,7 @@ import json
 
 def main():
 
-    project_name = "dev"
+    project_name = "dnd"
     global env
     env = Environment.getInstance(project_name=project_name)
 
